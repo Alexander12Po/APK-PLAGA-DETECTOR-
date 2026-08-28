@@ -1,0 +1,292 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "<a href=\"https://colab.research.google.com/github/Alexander12Po/APKDE-PLAGA/blob/main/colab_build_apk.ipynb\" target=\"_parent\"><img src=\"https://colab.research.google.com/assets/colab-badge.svg\" alt=\"Open In Colab\"/></a>"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# Compilar Agrowillay (APK) en Google Colab — version estable\n",
+    "\n",
+    "Este notebook clona tu repositorio de GitHub, instala Buildozer y todas las\n",
+    "dependencias del sistema **usando Python 3.11 en un entorno aislado** (para\n",
+    "evitar problemas con versiones de Python mas nuevas de Colab que rompen la\n",
+    "compilacion de Kivy), compila el APK y lo deja listo para descargar.\n",
+    "\n",
+    "**Antes de empezar:** sube tu proyecto (main.py, buildozer.spec, icon.png,\n",
+    "presplash.png) a la raiz de tu repositorio de GitHub. No subas ningun\n",
+    "archivo `config.json` ni claves de API sueltas.\n",
+    "\n",
+    "**Ejecuta las celdas en orden, de arriba hacia abajo, sin saltarte ninguna.**\n",
+    "\n",
+    "Si la sesion se desconecta a mitad de camino, vuelve a ejecutar TODAS las\n",
+    "celdas desde la 1 (el entorno se reinicia por completo)."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# 1) Clonar tu repositorio de GitHub\n",
+    "REPO_URL = \"https://github.com/Alexander12Po/APKDE-PLAGA.git\"\n",
+    "PROJECT_DIR = \"APKDE-PLAGA\"\n",
+    "\n",
+    "%cd /content\n",
+    "!rm -rf {PROJECT_DIR}\n",
+    "!git clone {REPO_URL} {PROJECT_DIR}\n",
+    "%cd {PROJECT_DIR}\n",
+    "!ls -la"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 2) Instalar Python 3.11 (aislado del Python del sistema)\n",
+    "\n",
+    "Colab a veces actualiza su Python del sistema a versiones muy nuevas que\n",
+    "todavia no son compatibles con las herramientas de compilacion de Kivy.\n",
+    "En vez de pelear con eso, instalamos Python 3.11 (via deadsnakes) y\n",
+    "armamos un entorno virtual propio solo para este build. Esto es lo que\n",
+    "evita que la compilacion se rompa a mitad de camino."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "%%bash\n",
+    "set -e\n",
+    "apt-get update -qq\n",
+    "apt-get install -y -qq software-properties-common\n",
+    "add-apt-repository -y ppa:deadsnakes/ppa > /dev/null 2>&1\n",
+    "apt-get update -qq\n",
+    "apt-get install -y -qq python3.11 python3.11-venv python3.11-dev\n",
+    "python3.11 --version\n",
+    "echo \"Python 3.11 listo.\""
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "%%bash\n",
+    "set -e\n",
+    "python3.11 -m venv /content/buildenv\n",
+    "source /content/buildenv/bin/activate\n",
+    "python -m pip install --upgrade pip -q\n",
+    "echo \"Entorno virtual creado en /content/buildenv\"\n",
+    "python --version"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 3) Instalar dependencias del sistema\n",
+    "\n",
+    "Buildozer necesita Java, herramientas de compilacion de Android, y varias\n",
+    "librerias de sistema Linux."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "%%bash\n",
+    "set -e\n",
+    "apt-get install -y -qq \\\n",
+    "    openjdk-17-jdk \\\n",
+    "    autoconf \\\n",
+    "    automake \\\n",
+    "    libtool \\\n",
+    "    pkg-config \\\n",
+    "    zlib1g-dev \\\n",
+    "    libncurses5-dev \\\n",
+    "    libncursesw5-dev \\\n",
+    "    libtinfo5 \\\n",
+    "    cmake \\\n",
+    "    libffi-dev \\\n",
+    "    libssl-dev \\\n",
+    "    unzip \\\n",
+    "    zip \\\n",
+    "    build-essential \\\n",
+    "    ccache \\\n",
+    "    git\n",
+    "\n",
+    "echo \"Dependencias del sistema instaladas.\""
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# 4) Instalar Buildozer y Cython DENTRO del entorno virtual de Python 3.11\n",
+    "%%bash\n",
+    "set -e\n",
+    "source /content/buildenv/bin/activate\n",
+    "pip install --upgrade pip -q\n",
+    "pip install buildozer cython==0.29.36 -q\n",
+    "yes | buildozer version"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 5) Configurar variables de entorno de Java"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "import os\n",
+    "os.environ[\"JAVA_HOME\"] = \"/usr/lib/jvm/java-17-openjdk-amd64\"\n",
+    "os.environ[\"PATH\"] = os.environ[\"JAVA_HOME\"] + \"/bin:/content/buildenv/bin:\" + os.environ[\"PATH\"]\n",
+    "!java -version\n",
+    "!which python\n",
+    "!python --version"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 6) Compilar el APK\n",
+    "\n",
+    "Esto puede tardar entre 15 y 40 minutos la primera vez (descarga el\n",
+    "Android SDK/NDK 25b completos). Las siguientes compilaciones son mas\n",
+    "rapidas porque Buildozer cachea el SDK/NDK en `.buildozer/`.\n",
+    "\n",
+    "El resultado completo se guarda en `build_log.txt`. Si algo falla, la\n",
+    "SIGUIENTE celda te muestra automaticamente solo las lineas con error —\n",
+    "no hace falta que busques nada a mano en el log."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "%cd /content/{PROJECT_DIR}\n",
+    "!rm -rf .buildozer\n",
+    "import subprocess, os\n",
+    "\n",
+    "env = os.environ.copy()\n",
+    "with open(\"build_log.txt\", \"w\") as logf:\n",
+    "    process = subprocess.Popen(\n",
+    "        [\"bash\", \"-lc\", \"source /content/buildenv/bin/activate && yes | buildozer -v android debug\"],\n",
+    "        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env, text=True, bufsize=1\n",
+    "    )\n",
+    "    for line in process.stdout:\n",
+    "        print(line, end=\"\")\n",
+    "        logf.write(line)\n",
+    "    process.wait()\n",
+    "    print(\"\\n\\n===== Buildozer termino con codigo:\", process.returncode, \"=====\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Si el build fallo arriba, esta celda te muestra automaticamente el motivo real\n",
+    "# (sin que tengas que buscar en el log a mano)\n",
+    "!grep -i -B2 -A5 \"error\" build_log.txt | tail -80 || echo \"No se encontraron lineas con 'error' en el log.\""
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 7) Ubicar y descargar el APK compilado\n",
+    "\n",
+    "El archivo queda dentro de la carpeta `bin/`."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "import glob, os\n",
+    "apk_files = sorted(glob.glob(\"/content/{}/bin/*.apk\".format(PROJECT_DIR)))\n",
+    "print(\"APK generado:\", apk_files)\n",
+    "if apk_files:\n",
+    "    for apk in apk_files:\n",
+    "        print(f\"{os.path.basename(apk)} — {os.path.getsize(apk) / (1024*1024):.2f} MB\")\n",
+    "else:\n",
+    "    print(\"No se genero ningun APK. Revisa la celda de errores (paso 6, segunda celda).\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from google.colab import files\n",
+    "\n",
+    "if apk_files:\n",
+    "    files.download(apk_files[-1])\n",
+    "else:\n",
+    "    print(\"No se encontro ningun APK. Revisa el log de compilacion (build_log.txt).\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Notas y solucion de problemas\n",
+    "\n",
+    "- **Version estable garantizada**: este notebook usa `android.api=34`,\n",
+    "  `android.ndk=25b` y la rama estable (master) de python-for-android —\n",
+    "  la combinacion mas probada para Kivy/KivyMD. Evita `p4a.branch=develop`\n",
+    "  y versiones de NDK/API muy nuevas, que suelen fallar de forma\n",
+    "  impredecible.\n",
+    "- **Python aislado**: todo el build corre dentro de un entorno virtual con\n",
+    "  Python 3.11, sin importar que version de Python tenga Colab por defecto.\n",
+    "- **Si la sesion se desconecta**: Colab borra todo el entorno. Hay que\n",
+    "  volver a ejecutar TODAS las celdas desde la 1.\n",
+    "- **Si sigue fallando**: ejecuta la celda de `grep` del paso 6 y comparte\n",
+    "  el resultado completo — ahi va a estar la causa real, no un error\n",
+    "  generico."
+   ]
+  }
+ ],
+ "metadata": {
+  "colab": {
+   "provenance": []
+  },
+  "kernelspec": {
+   "name": "python3",
+   "display_name": "Python 3"
+  },
+  "language_info": {
+   "name": "python"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 0
+}
