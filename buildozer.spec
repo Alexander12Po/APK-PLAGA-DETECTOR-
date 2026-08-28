@@ -67,7 +67,7 @@ android.allow_backup = True
 # misma autoridad "<paquete>.fileprovider" declarada aca.
 # ---------------------------------------------------------------------------
 android.extra_manifest_application_arguments = src/android/extra_manifest_application.xml
-android.add_resources = src/android/file_paths.xml:xml/file_paths
+android.add_resources = src/android/file_paths.xml:xml/file_paths.xml
 
 # Necesario para "Chrome Custom Tabs": al abrir Google Maps (ubicacion/ayuda
 # cercana), esto muestra una flecha "<-" en la parte de arriba de la pagina
