@@ -1,0 +1,20 @@
+<!--
+    Declara el FileProvider que usa main.py (take_photo) para poder pasarle
+    a la app de Camara una URI "content://" en vez de "file://" (obligatorio
+    desde Android 7 / API 24, si no la app truena con
+    FileUriExposedException).
+
+    "${applicationId}" lo reemplaza Gradle automaticamente por
+    "org.agrowillay.agrowillay" (package.domain + package.name de
+    buildozer.spec), y debe coincidir EXACTAMENTE con la autoridad que arma
+    main.py: f"{mActivity.getPackageName()}.fileprovider"
+-->
+<provider
+    android:name="androidx.core.content.FileProvider"
+    android:authorities="${applicationId}.fileprovider"
+    android:exported="false"
+    android:grantUriPermissions="true">
+    <meta-data
+        android:name="android.support.FILE_PROVIDER_PATHS"
+        android:resource="@xml/file_paths" />
+</provider>

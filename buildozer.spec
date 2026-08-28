@@ -9,7 +9,7 @@ package.domain = org.agrowillay
 
 # Carpeta fuente (donde esta main.py)
 source.dir = .
-source.include_exts = py,png,jpg,jpeg,kv,atlas,ttf,json
+source.include_exts = py,png,jpg,jpeg,kv,atlas,ttf,json,xml
 
 version = 1.0.0
 
@@ -60,12 +60,22 @@ android.archs = arm64-v8a
 
 android.allow_backup = True
 
+# ---------------------------------------------------------------------------
+# FileProvider para la camara (arregla el crash "FileUriExposedException"
+# al tocar "Tomar foto"). Ver src/android/extra_manifest_application.xml y
+# src/android/file_paths.xml — main.py arma la URI content:// usando la
+# misma autoridad "<paquete>.fileprovider" declarada aca.
+# ---------------------------------------------------------------------------
+android.extra_manifest_application_arguments = src/android/extra_manifest_application.xml
+android.add_resources = src/android/file_paths.xml:xml/file_paths
+
 # Necesario para "Chrome Custom Tabs": al abrir Google Maps (ubicacion/ayuda
 # cercana), esto muestra una flecha "<-" en la parte de arriba de la pagina
 # para volver directo a la app, en vez de dejar al usuario sin forma de
-# regresar.
+# regresar. Tambien trae la libreria androidx.core que usa el FileProvider
+# de la camara.
 android.enable_androidx = True
-android.gradle_dependencies = androidx.browser:browser:1.5.0
+android.gradle_dependencies = androidx.browser:browser:1.5.0,androidx.core:core:1.10.1
 
 [buildozer]
 log_level = 2
