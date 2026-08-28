@@ -48,7 +48,7 @@ android.permissions = INTERNET,CAMERA,ACCESS_FINE_LOCATION,ACCESS_COARSE_LOCATIO
 # mayoria de builds de Kivy/Buildozer en produccion.
 android.api = 34
 android.minapi = 24
-android.ndk = 27.3.13750724
+android.ndk_path = /usr/local/lib/android/sdk/ndk/27.3.13750724
 android.accept_sdk_license = True
 
 # NO fijamos p4a.branch: dejamos que Buildozer use la rama "master" de
