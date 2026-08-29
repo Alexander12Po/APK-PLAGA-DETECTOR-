@@ -95,7 +95,7 @@ GEMINI_ENDPOINT = (
 # PRIVADO. Si en algun momento lo pones publico de nuevo, esta clave
 # quedaria expuesta otra vez y habria que revocarla y generar una nueva
 # (en https://aistudio.google.com/apikey) antes de hacerlo publico.
-DEFAULT_GEMINI_API_KEY = "AQ.Ab8RN6Lm0f5UBdmiAhvk0-46rp8oACmkd1_n56R-_riaI2y3Cw"
+DEFAULT_GEMINI_API_KEY = "AQ.Ab8RN6IMp4fXVdton4Pp-oPKjQhpdlrNwr7uADB7OuuP6F4rfA"
 
 # Mismo prompt que usaba el backend original, para mantener la misma
 # calidad y estructura de diagnóstico.
@@ -525,11 +525,21 @@ class AgrowillayApp(MDApp):
             return
 
         self.last_diagnosis = diagnosis
-        main_screen.ids.speak_btn.disabled = False
-        self._show_card(main_screen.ids.result_card)
 
-        # Igual que en la web: apenas hay diagnostico, se busca ayuda cercana.
-        self.locate_nearby()
+        try:
+            main_screen.ids.speak_btn.disabled = False
+            self._show_card(main_screen.ids.result_card)
+
+            # Igual que en la web: apenas hay diagnostico, se busca ayuda cercana.
+            self.locate_nearby()
+        except Exception:  # noqa: BLE001
+            # Si algo falla ACA (por ejemplo el GPS o un id del .kv), el
+            # diagnostico ya se mostro correctamente: no debe cerrar la app.
+            _write_crash_log(
+                "Error despues de mostrar el diagnostico (no crashea la app):\n"
+                + traceback.format_exc()
+            )
+            toast("No se pudo cargar la ayuda cercana, pero el diagnostico es correcto")
 
     @staticmethod
     def _txt(value, default="-"):
@@ -675,9 +685,10 @@ class AgrowillayApp(MDApp):
 
     def locate_nearby(self):
         main_screen = self.root.get_screen("main")
-        self._show_card(main_screen.ids.locator_card)
 
         try:
+            self._show_card(main_screen.ids.locator_card)
+
             from plyer import gps
 
             gps.configure(on_location=self._on_gps_location, on_status=lambda *a: None)
@@ -685,7 +696,14 @@ class AgrowillayApp(MDApp):
             # Si en 6 segundos no llega ubicacion, usamos busqueda manual.
             Clock.schedule_once(self._gps_timeout_check, 6)
         except Exception:
-            self._render_manual_search()
+            _write_crash_log(
+                "Error en locate_nearby (no crashea la app):\n"
+                + traceback.format_exc()
+            )
+            try:
+                self._render_manual_search()
+            except Exception:
+                pass
 
     def _gps_timeout_check(self, dt):
         main_screen = self.root.get_screen("main")
