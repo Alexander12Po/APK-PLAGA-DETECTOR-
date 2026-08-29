@@ -25,6 +25,7 @@ import base64
 import json
 import os
 import threading
+import traceback
 import webbrowser
 from pathlib import Path
 
@@ -738,5 +739,26 @@ class AgrowillayApp(MDApp):
             toast("No se pudo reproducir el audio")
 
 
+def _write_crash_log(exc_text):
+    """Si la app truena al arrancar, guarda el error completo en un .txt
+    dentro de la carpeta Descargas del celular, para poder leerlo con
+    cualquier explorador de archivos (sin necesitar cable ni ADB)."""
+    try:
+        if platform == "android":
+            from android.storage import primary_external_storage_path
+
+            log_dir = Path(primary_external_storage_path()) / "Download"
+        else:
+            log_dir = APP_DATA_DIR
+        log_dir.mkdir(parents=True, exist_ok=True)
+        (log_dir / "agrowillay_crash.txt").write_text(exc_text, encoding="utf-8")
+    except Exception:
+        pass  # si ni siquiera esto funciona, no hay mas que hacer aca
+
+
 if __name__ == "__main__":
-    AgrowillayApp().run()
+    try:
+        AgrowillayApp().run()
+    except Exception:
+        _write_crash_log(traceback.format_exc())
+        raise
