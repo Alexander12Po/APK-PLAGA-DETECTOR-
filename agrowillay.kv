@@ -162,13 +162,12 @@ ScreenManager:
 # Boton circular (bocina) para escuchar el diagnostico en voz alta.
 <RoundIconButton@ButtonBehavior+MDBoxLayout>:
     icon: "volume-high"
-    bg_color: app.theme_color
     size_hint: None, None
     size: dp(52), dp(52)
     opacity: 0.4 if self.disabled else 1
     canvas.before:
         Color:
-            rgba: self.bg_color
+            rgba: app.theme_color
         Ellipse:
             pos: self.pos
             size: self.size
