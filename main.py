@@ -96,7 +96,7 @@ GEMINI_ENDPOINT = (
 # PRIVADO. Si en algun momento lo pones publico de nuevo, esta clave
 # quedaria expuesta otra vez y habria que revocarla y generar una nueva
 # (en https://aistudio.google.com/apikey) antes de hacerlo publico.
-DEFAULT_GEMINI_API_KEY = "AQ.Ab8RN6JaLT-PgNjmsdna0Fu1rUWh-SuoyLeNHHag2V597Yy-1w"
+DEFAULT_GEMINI_API_KEY = "AQ.Ab8RN6J4joFphAETQ-L1L78xpw0JaByyEU0J5u2MIlPhchPMng"
 
 # Mismo prompt que usaba el backend original, para mantener la misma
 # calidad y estructura de diagnóstico.
