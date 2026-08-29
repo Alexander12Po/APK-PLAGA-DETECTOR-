@@ -96,7 +96,7 @@ GEMINI_ENDPOINT = (
 # PRIVADO. Si en algun momento lo pones publico de nuevo, esta clave
 # quedaria expuesta otra vez y habria que revocarla y generar una nueva
 # (en https://aistudio.google.com/apikey) antes de hacerlo publico.
-DEFAULT_GEMINI_API_KEY = "AQ.Ab8RN6Lm0f5UBdmiAhvk0-46rp8oACmkd1_n56R-_riaI2y3Cw"
+DEFAULT_GEMINI_API_KEY = "AQ.Ab8RN6JaLT-PgNjmsdna0Fu1rUWh-SuoyLeNHHag2V597Yy-1w"
 
 # Mismo prompt que usaba el backend original, para mantener la misma
 # calidad y estructura de diagnóstico.
@@ -507,14 +507,20 @@ class AgrowillayApp(MDApp):
                 "Error de GeminiClient al analizar (la app sigue abierta):\n"
                 + traceback.format_exc()
             )
-            Clock.schedule_once(lambda dt: self._on_analysis_error(self._safe_msg(exc)))
+            # OJO: 'exc' se borra automaticamente al salir de este bloque
+            # 'except' (asi funciona Python 3), y el lambda de abajo se
+            # ejecuta MAS TARDE via Clock, cuando 'exc' ya no existe. Por
+            # eso el mensaje se calcula aqui mismo, antes de programarlo.
+            msg = self._safe_msg(exc)
+            Clock.schedule_once(lambda dt: self._on_analysis_error(msg))
             return
         except Exception as exc:  # noqa: BLE001
             _write_crash_log(
                 "Error inesperado al analizar (la app sigue abierta):\n"
                 + traceback.format_exc()
             )
-            Clock.schedule_once(lambda dt: self._on_analysis_error(self._safe_msg(exc)))
+            msg = self._safe_msg(exc)
+            Clock.schedule_once(lambda dt: self._on_analysis_error(msg))
             return
 
         Clock.schedule_once(lambda dt: self._on_analysis_success(diagnosis))
