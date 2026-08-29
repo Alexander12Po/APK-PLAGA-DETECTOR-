@@ -1,0 +1,342 @@
+#:import dp kivy.metrics.dp
+#:import ButtonBehavior kivy.uix.behaviors.ButtonBehavior
+
+ScreenManager:
+    MainScreen:
+
+<StepBadge@MDBoxLayout>:
+    icon: "numeric-1"
+    size_hint: None, None
+    size: dp(42), dp(42)
+    canvas.before:
+        Color:
+            rgba: app.theme_color
+        Ellipse:
+            pos: self.pos
+            size: self.size
+
+    MDIcon:
+        icon: root.icon
+        halign: "center"
+        valign: "middle"
+        theme_text_color: "Custom"
+        text_color: 1, 1, 1, 1
+        font_size: "22sp"
+        pos_hint: {"center_x": 0.5, "center_y": 0.5}
+
+<StepHeader@MDBoxLayout>:
+    icon: "numeric-1"
+    title_text: ""
+    subtitle_text: ""
+    adaptive_height: True
+    spacing: dp(14)
+
+    StepBadge:
+        icon: root.icon
+
+    MDBoxLayout:
+        orientation: "vertical"
+        adaptive_height: True
+        spacing: dp(2)
+
+        MDLabel:
+            text: root.title_text
+            bold: True
+            font_style: "Subtitle1"
+            adaptive_height: True
+
+        MDLabel:
+            text: root.subtitle_text
+            theme_text_color: "Secondary"
+            font_style: "Caption"
+            adaptive_height: True
+
+<SectionCard@MDCard>:
+    orientation: "vertical"
+    padding: dp(20)
+    spacing: dp(16)
+    adaptive_height: True
+    radius: [20, 20, 20, 20]
+    elevation: 1
+    shadow_softness: 12
+    shadow_offset: (0, -2)
+    md_bg_color: 1, 1, 1, 1
+
+<PillButton@MDRaisedButton>:
+    md_bg_color: app.theme_color
+    text_color: 1, 1, 1, 1
+    elevation: 1
+    size_hint_x: 1
+    height: dp(48)
+    font_size: "15sp"
+
+<GhostButton@MDFlatButton>:
+    md_bg_color: 0.925, 0.965, 0.949, 1
+    text_color: app.theme_color
+    elevation: 0
+    size_hint_x: 1
+    height: dp(48)
+    font_size: "15sp"
+
+<HeroCard@MDCard>:
+    orientation: "vertical"
+    adaptive_height: True
+    padding: dp(26), dp(28)
+    spacing: dp(8)
+    radius: [24, 24, 24, 24]
+    elevation: 2
+    shadow_softness: 16
+    md_bg_color: app.theme_color
+
+    MDIcon:
+        icon: "leaf"
+        halign: "center"
+        theme_text_color: "Custom"
+        text_color: 1, 1, 1, 1
+        font_size: "36sp"
+        adaptive_height: True
+
+    MDLabel:
+        text: "Identifica plagas en tus plantas al instante"
+        font_style: "H6"
+        bold: True
+        adaptive_height: True
+        halign: "center"
+        theme_text_color: "Custom"
+        text_color: 1, 1, 1, 1
+
+    MDLabel:
+        text: "Sube una foto o tomala con la camara y la IA te dara un plan de tratamiento claro."
+        adaptive_height: True
+        halign: "center"
+        theme_text_color: "Custom"
+        text_color: 1, 1, 1, 0.85
+
+# ---------------------------------------------------------------------------
+# Piezas nuevas para el diseño del diagnostico
+# ---------------------------------------------------------------------------
+
+<SeverityChip@MDBoxLayout>:
+    text: ""
+    chip_color: 0.77, 0.5, 0.1, 1
+    adaptive_size: True
+    padding: dp(14), dp(6)
+    canvas.before:
+        Color:
+            rgba: root.chip_color
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [dp(14),]
+
+    MDLabel:
+        text: root.text
+        bold: True
+        theme_text_color: "Custom"
+        text_color: 1, 1, 1, 1
+        font_style: "Caption"
+        adaptive_size: True
+
+<IconRow@MDBoxLayout>:
+    icon: "check-circle-outline"
+    icon_color: 0, 0, 0, 1
+    text: ""
+    adaptive_height: True
+    spacing: dp(10)
+    padding: 0, dp(3)
+
+    MDIcon:
+        icon: root.icon
+        theme_text_color: "Custom"
+        text_color: root.icon_color
+        font_size: "20sp"
+        size_hint: None, None
+        size: dp(24), dp(24)
+        pos_hint: {"top": 1}
+
+    MDLabel:
+        text: root.text
+        markup: True
+        adaptive_height: True
+
+# Boton circular (bocina) para escuchar el diagnostico en voz alta.
+<RoundIconButton@ButtonBehavior+MDBoxLayout>:
+    icon: "volume-high"
+    size_hint: None, None
+    size: dp(52), dp(52)
+    opacity: 0.4 if self.disabled else 1
+    canvas.before:
+        Color:
+            rgba: app.theme_color
+        Ellipse:
+            pos: self.pos
+            size: self.size
+
+    MDIcon:
+        icon: root.icon
+        halign: "center"
+        theme_text_color: "Custom"
+        text_color: 1, 1, 1, 1
+        font_size: "24sp"
+        pos_hint: {"center_x": 0.5, "center_y": 0.5}
+
+<MainScreen>:
+    name: "main"
+
+    MDBoxLayout:
+        orientation: "vertical"
+        md_bg_color: 0.96, 0.97, 0.965, 1
+
+        MDTopAppBar:
+            title: "Agrowillay"
+            elevation: 4
+            md_bg_color: app.theme_color
+            specific_text_color: 1, 1, 1, 1
+            left_action_items: [["leaf", lambda x: None]]
+
+        ScrollView:
+            do_scroll_x: False
+            MDBoxLayout:
+                id: content_box
+                orientation: "vertical"
+                adaptive_height: True
+                padding: [dp(16), dp(20), dp(16), dp(28)]
+                spacing: dp(18)
+
+                HeroCard:
+
+                # ---------------- PASO 1: FOTO ----------------
+                SectionCard:
+
+                    StepHeader:
+                        icon: "camera-outline"
+                        title_text: "Fotografia la planta"
+                        subtitle_text: "Usa buena luz natural y enfoca la zona afectada."
+
+                    FloatLayout:
+                        size_hint_y: None
+                        height: dp(210)
+
+                        canvas.before:
+                            Color:
+                                rgba: 0.95, 0.97, 0.965, 1
+                            RoundedRectangle:
+                                pos: self.pos
+                                size: self.size
+                                radius: [16,]
+                            Color:
+                                rgba: 0.8, 0.87, 0.84, 1
+                            Line:
+                                dash_length: 7
+                                dash_offset: 4
+                                width: 1.1
+                                rounded_rectangle:
+                                    [self.x + 1, self.y + 1, self.width - 2, self.height - 2, 16]
+
+                        Image:
+                            id: preview_image
+                            size_hint: 0.94, 0.9
+                            pos_hint: {"center_x": 0.5, "center_y": 0.5}
+                            allow_stretch: True
+                            keep_ratio: True
+                            opacity: 1
+
+                        MDBoxLayout:
+                            id: preview_placeholder
+                            orientation: "vertical"
+                            size_hint: None, None
+                            size: dp(220), dp(74)
+                            pos_hint: {"center_x": 0.5, "center_y": 0.5}
+                            spacing: dp(8)
+
+                            MDIcon:
+                                icon: "image-plus-outline"
+                                halign: "center"
+                                theme_text_color: "Hint"
+                                font_size: "36sp"
+
+                            MDLabel:
+                                text: "Aun no hay foto seleccionada"
+                                halign: "center"
+                                theme_text_color: "Hint"
+                                font_style: "Caption"
+                                adaptive_height: True
+
+                    MDBoxLayout:
+                        adaptive_height: True
+                        spacing: dp(10)
+
+                        PillButton:
+                            text: "Tomar foto"
+                            icon: "camera"
+                            on_release: app.take_photo()
+
+                        GhostButton:
+                            text: "Subir imagen"
+                            icon: "image-multiple-outline"
+                            on_release: app.choose_from_gallery()
+
+                    MDBoxLayout:
+                        adaptive_height: True
+                        spacing: dp(10)
+
+                        PillButton:
+                            id: analyze_btn
+                            text: "Analizar planta"
+                            icon: "magnify-scan"
+                            disabled: True
+                            on_release: app.analyze_photo()
+
+                        MDSpinner:
+                            id: analyze_spinner
+                            size_hint: None, None
+                            size: dp(28), dp(28)
+                            active: False
+                            opacity: 0
+                            color: app.theme_color
+                            pos_hint: {"center_y": 0.5}
+
+                # ---------------- PASO 2: DIAGNÓSTICO ----------------
+                SectionCard:
+                    id: result_card
+                    opacity: 0
+                    disabled: True
+
+                    MDBoxLayout:
+                        adaptive_height: True
+                        spacing: dp(10)
+
+                        StepHeader:
+                            icon: "clipboard-text-outline"
+                            title_text: "Diagnostico"
+                            subtitle_text: "Resultado generado por la IA a partir de tu foto."
+
+                        RoundIconButton:
+                            id: speak_btn
+                            icon: "volume-high"
+                            disabled: True
+                            pos_hint: {"center_y": 0.5}
+                            on_release: app.speak_diagnosis(app.last_diagnosis)
+
+                    MDBoxLayout:
+                        id: result_body
+                        orientation: "vertical"
+                        adaptive_height: True
+                        spacing: dp(10)
+
+                # ---------------- PASO 3: AYUDA CERCANA ----------------
+                SectionCard:
+                    id: locator_card
+                    opacity: 0
+                    disabled: True
+
+                    StepHeader:
+                        icon: "map-marker-radius-outline"
+                        title_text: "Ayuda cerca de ti"
+                        subtitle_text: "Viveros, tiendas de jardineria y agronomos que pueden ayudarte."
+
+                    MDBoxLayout:
+                        id: locator_body
+                        orientation: "vertical"
+                        adaptive_height: True
+                        spacing: dp(10)
