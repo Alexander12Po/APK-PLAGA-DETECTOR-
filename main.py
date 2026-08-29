@@ -31,6 +31,8 @@ from pathlib import Path
 from kivy.animation import Animation
 from kivy.clock import Clock, mainthread
 from kivy.core.window import Window
+from kivy.factory import Factory
+from kivy.lang import Builder
 from kivy.metrics import dp
 from kivy.properties import BooleanProperty, ObjectProperty, StringProperty
 from kivy.uix.screenmanager import Screen
@@ -38,11 +40,9 @@ from kivy.uix.screenmanager import Screen
 from kivymd.app import MDApp
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.card import MDCard
-from kivymd.uix.dialog import MDDialog
-from kivymd.uix.button import MDFlatButton, MDRaisedButton
+from kivymd.uix.button import MDRaisedButton
 from kivymd.uix.label import MDLabel
 from kivymd.uix.spinner import MDSpinner
-from kivymd.uix.textfield import MDTextField
 from kivymd.toast import toast
 
 from kivy.utils import platform
@@ -258,278 +258,7 @@ class GeminiClient:
 # igual que en la web original)
 # ---------------------------------------------------------------------------
 
-KV = """
-#:import dp kivy.metrics.dp
 
-ScreenManager:
-    MainScreen:
-
-<StepBadge@MDBoxLayout>:
-    icon: "numeric-1"
-    size_hint: None, None
-    size: dp(42), dp(42)
-    canvas.before:
-        Color:
-            rgba: app.theme_color
-        Ellipse:
-            pos: self.pos
-            size: self.size
-
-    MDIcon:
-        icon: root.icon
-        halign: "center"
-        valign: "middle"
-        theme_text_color: "Custom"
-        text_color: 1, 1, 1, 1
-        font_size: "22sp"
-        pos_hint: {"center_x": 0.5, "center_y": 0.5}
-
-<StepHeader@MDBoxLayout>:
-    icon: "numeric-1"
-    title_text: ""
-    subtitle_text: ""
-    adaptive_height: True
-    spacing: dp(14)
-
-    StepBadge:
-        icon: root.icon
-
-    MDBoxLayout:
-        orientation: "vertical"
-        adaptive_height: True
-        spacing: dp(2)
-
-        MDLabel:
-            text: root.title_text
-            bold: True
-            font_style: "Subtitle1"
-            adaptive_height: True
-
-        MDLabel:
-            text: root.subtitle_text
-            theme_text_color: "Secondary"
-            font_style: "Caption"
-            adaptive_height: True
-
-<SectionCard@MDCard>:
-    orientation: "vertical"
-    padding: dp(20)
-    spacing: dp(16)
-    adaptive_height: True
-    radius: [20, 20, 20, 20]
-    elevation: 1
-    shadow_softness: 12
-    shadow_offset: (0, -2)
-    md_bg_color: 1, 1, 1, 1
-
-<PillButton@MDRaisedButton>:
-    md_bg_color: app.theme_color
-    text_color: 1, 1, 1, 1
-    elevation: 1
-    size_hint_x: 1
-    height: dp(48)
-    font_size: "15sp"
-
-<GhostButton@MDFlatButton>:
-    md_bg_color: 0.925, 0.965, 0.949, 1
-    text_color: app.theme_color
-    elevation: 0
-    size_hint_x: 1
-    height: dp(48)
-    font_size: "15sp"
-
-<HeroCard@MDCard>:
-    orientation: "vertical"
-    adaptive_height: True
-    padding: dp(26), dp(28)
-    spacing: dp(8)
-    radius: [24, 24, 24, 24]
-    elevation: 2
-    shadow_softness: 16
-    md_bg_color: app.theme_color
-
-    MDIcon:
-        icon: "leaf"
-        halign: "center"
-        theme_text_color: "Custom"
-        text_color: 1, 1, 1, 1
-        font_size: "36sp"
-        adaptive_height: True
-
-    MDLabel:
-        text: "Identifica plagas en tus plantas al instante"
-        font_style: "H6"
-        bold: True
-        adaptive_height: True
-        halign: "center"
-        theme_text_color: "Custom"
-        text_color: 1, 1, 1, 1
-
-    MDLabel:
-        text: "Sube una foto o tomala con la camara y la IA te dara un plan de tratamiento claro."
-        adaptive_height: True
-        halign: "center"
-        theme_text_color: "Custom"
-        text_color: 1, 1, 1, 0.85
-
-<MainScreen>:
-    name: "main"
-
-    MDBoxLayout:
-        orientation: "vertical"
-        md_bg_color: 0.96, 0.97, 0.965, 1
-
-        MDTopAppBar:
-            title: "Agrowillay"
-            elevation: 4
-            md_bg_color: app.theme_color
-            specific_text_color: 1, 1, 1, 1
-            left_action_items: [["leaf", lambda x: None]]
-            right_action_items: [["cog-outline", lambda x: app.open_settings_dialog()]]
-
-        ScrollView:
-            do_scroll_x: False
-            MDBoxLayout:
-                id: content_box
-                orientation: "vertical"
-                adaptive_height: True
-                padding: [dp(16), dp(20), dp(16), dp(28)]
-                spacing: dp(18)
-
-                HeroCard:
-
-                # ---------------- PASO 1: FOTO ----------------
-                SectionCard:
-
-                    StepHeader:
-                        icon: "camera-outline"
-                        title_text: "Fotografia la planta"
-                        subtitle_text: "Usa buena luz natural y enfoca la zona afectada."
-
-                    FloatLayout:
-                        size_hint_y: None
-                        height: dp(210)
-
-                        canvas.before:
-                            Color:
-                                rgba: 0.95, 0.97, 0.965, 1
-                            RoundedRectangle:
-                                pos: self.pos
-                                size: self.size
-                                radius: [16,]
-                            Color:
-                                rgba: 0.8, 0.87, 0.84, 1
-                            Line:
-                                dash_length: 7
-                                dash_offset: 4
-                                width: 1.1
-                                rounded_rectangle:
-                                    [self.x + 1, self.y + 1, self.width - 2, self.height - 2, 16]
-
-                        Image:
-                            id: preview_image
-                            size_hint: 0.94, 0.9
-                            pos_hint: {"center_x": 0.5, "center_y": 0.5}
-                            allow_stretch: True
-                            keep_ratio: True
-                            opacity: 1
-
-                        MDBoxLayout:
-                            id: preview_placeholder
-                            orientation: "vertical"
-                            size_hint: None, None
-                            size: dp(220), dp(74)
-                            pos_hint: {"center_x": 0.5, "center_y": 0.5}
-                            spacing: dp(8)
-
-                            MDIcon:
-                                icon: "image-plus-outline"
-                                halign: "center"
-                                theme_text_color: "Hint"
-                                font_size: "36sp"
-
-                            MDLabel:
-                                text: "Aun no hay foto seleccionada"
-                                halign: "center"
-                                theme_text_color: "Hint"
-                                font_style: "Caption"
-                                adaptive_height: True
-
-                    MDBoxLayout:
-                        adaptive_height: True
-                        spacing: dp(10)
-
-                        PillButton:
-                            text: "Tomar foto"
-                            icon: "camera"
-                            on_release: app.take_photo()
-
-                        GhostButton:
-                            text: "Subir imagen"
-                            icon: "image-multiple-outline"
-                            on_release: app.choose_from_gallery()
-
-                    MDBoxLayout:
-                        adaptive_height: True
-                        spacing: dp(10)
-
-                        PillButton:
-                            id: analyze_btn
-                            text: "Analizar planta"
-                            icon: "magnify-scan"
-                            disabled: True
-                            on_release: app.analyze_photo()
-
-                        MDSpinner:
-                            id: analyze_spinner
-                            size_hint: None, None
-                            size: dp(28), dp(28)
-                            active: False
-                            opacity: 0
-                            color: app.theme_color
-                            pos_hint: {"center_y": 0.5}
-
-                # ---------------- PASO 2: DIAGNÓSTICO ----------------
-                SectionCard:
-                    id: result_card
-                    opacity: 0
-                    disabled: True
-
-                    StepHeader:
-                        icon: "clipboard-text-outline"
-                        title_text: "Diagnostico"
-                        subtitle_text: "Resultado generado por la IA a partir de tu foto."
-
-                    MDLabel:
-                        id: result_body
-                        text: ""
-                        adaptive_height: True
-                        markup: True
-
-                    GhostButton:
-                        id: speak_btn
-                        text: "Escuchar diagnostico"
-                        icon: "volume-high"
-                        disabled: True
-                        on_release: app.speak_diagnosis(app.last_diagnosis)
-
-                # ---------------- PASO 3: AYUDA CERCANA ----------------
-                SectionCard:
-                    id: locator_card
-                    opacity: 0
-                    disabled: True
-
-                    StepHeader:
-                        icon: "map-marker-radius-outline"
-                        title_text: "Ayuda cerca de ti"
-                        subtitle_text: "Viveros, tiendas de jardineria y agronomos que pueden ayudarte."
-
-                    MDBoxLayout:
-                        id: locator_body
-                        orientation: "vertical"
-                        adaptive_height: True
-                        spacing: dp(10)
-"""
 
 
 class MainScreen(Screen):
@@ -545,48 +274,10 @@ class AgrowillayApp(MDApp):
         self.title = "Agrowillay"
         self.theme_cls.primary_palette = "Green"
         self.icon = "assets/icon.png"
-        return __import__("kivy.lang", fromlist=["Builder"]).Builder.load_string(KV)
-
-    # ------------------------------------------------------------------
-    # Ajustes: clave de Gemini (opcional, la app ya trae una por defecto)
-    # ------------------------------------------------------------------
-
-    def open_settings_dialog(self):
-        current_key = ConfigManager.load_api_key()
-        self._settings_field = MDTextField(
-            text=current_key,
-            hint_text="Clave de Gemini (API key)",
-            password=True,
-            helper_text="Dejala vacia para usar la clave incluida en la app",
-            helper_text_mode="persistent",
+        kv_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "agrowillay.kv"
         )
-        self.settings_dialog = MDDialog(
-            title="Ajustes",
-            type="custom",
-            content_cls=self._settings_field,
-            buttons=[
-                MDFlatButton(
-                    text="Cancelar",
-                    on_release=lambda *_: self.settings_dialog.dismiss(),
-                ),
-                MDRaisedButton(
-                    text="Guardar",
-                    md_bg_color=self.theme_color,
-                    on_release=self._save_settings,
-                ),
-            ],
-        )
-        self.settings_dialog.open()
-
-    def _save_settings(self, *_):
-        key = self._settings_field.text.strip()
-        try:
-            ConfigManager.save_api_key(key)
-            toast("Ajustes guardados")
-        except Exception as exc:  # noqa: BLE001
-            toast(f"No se pudo guardar: {exc}")
-        finally:
-            self.settings_dialog.dismiss()
+        return Builder.load_file(kv_path)
 
     # ------------------------------------------------------------------
     # Paso 1: seleccionar / tomar foto
@@ -801,30 +492,110 @@ class AgrowillayApp(MDApp):
 
         severidad = diagnosis.get("severidad", "media")
         color_map = {"alta": "red_600", "media": "amber_600", "baja": "green_600"}
-        color_hex = COLORS.get(color_map.get(severidad, "amber_600"))
+        chip_color = hex_to_rgba(COLORS.get(color_map.get(severidad, "amber_600")))
 
-        pasos = diagnosis.get("pasos", [])
-        pasos_txt = "\n".join(f"  - {p}" for p in pasos)
-        sintomas = diagnosis.get("sintomas_observados", [])
-        sintomas_txt = ", ".join(sintomas) if sintomas else "-"
+        body = main_screen.ids.result_body
+        body.clear_widgets()
 
-        texto = (
-            f"[b]Planta:[/b] {diagnosis.get('planta_identificada', '-')}\n"
-            f"[b]Problema:[/b] {diagnosis.get('plaga_o_problema', '-')}\n"
-            f"[b]Severidad:[/b] [color={color_hex}]{severidad.upper()}[/color]\n"
-            f"[b]Sintomas:[/b] {sintomas_txt}\n\n"
-            f"[b]Plan de tratamiento:[/b]\n{pasos_txt}\n\n"
-            f"[b]Prevencion:[/b] {diagnosis.get('prevencion', '-')}\n"
-            f"[b]Urgencia:[/b] {diagnosis.get('urgencia', '-')}"
+        body.add_widget(
+            self._make_field_row("Planta", diagnosis.get("planta_identificada", "-"))
+        )
+        body.add_widget(
+            self._make_field_row("Problema", diagnosis.get("plaga_o_problema", "-"))
         )
 
-        main_screen.ids.result_body.text = texto
+        severity_row = MDBoxLayout(adaptive_height=True, spacing=dp(8))
+        severity_row.add_widget(
+            MDLabel(
+                text="[b]Severidad:[/b]",
+                markup=True,
+                adaptive_height=True,
+                size_hint_x=None,
+                width=dp(96),
+            )
+        )
+        severity_row.add_widget(
+            Factory.SeverityChip(text=severidad.upper(), chip_color=chip_color)
+        )
+        body.add_widget(severity_row)
+
+        sintomas = diagnosis.get("sintomas_observados", [])
+        if sintomas:
+            body.add_widget(
+                MDLabel(
+                    text="[b]Sintomas observados[/b]",
+                    markup=True,
+                    adaptive_height=True,
+                )
+            )
+            for sintoma in sintomas:
+                body.add_widget(
+                    Factory.IconRow(
+                        icon="alert-circle-outline",
+                        icon_color=hex_to_rgba(COLORS["amber_600"]),
+                        text=sintoma,
+                    )
+                )
+
+        pasos = diagnosis.get("pasos", [])
+        if pasos:
+            body.add_widget(
+                MDLabel(
+                    text="[b]Plan de tratamiento[/b]",
+                    markup=True,
+                    adaptive_height=True,
+                )
+            )
+            for paso in pasos:
+                body.add_widget(
+                    Factory.IconRow(
+                        icon="check-circle-outline",
+                        icon_color=self.theme_color,
+                        text=paso,
+                    )
+                )
+
+        prevencion = diagnosis.get("prevencion")
+        if prevencion:
+            body.add_widget(
+                Factory.IconRow(
+                    icon="shield-check-outline",
+                    icon_color=self.theme_color,
+                    text=f"[b]Prevencion:[/b] {prevencion}",
+                )
+            )
+
+        urgencia = diagnosis.get("urgencia")
+        if urgencia:
+            body.add_widget(
+                Factory.IconRow(
+                    icon="clock-alert-outline",
+                    icon_color=hex_to_rgba(COLORS["red_600"]),
+                    text=f"[b]Urgencia:[/b] {urgencia}",
+                )
+            )
+
         self.last_diagnosis = diagnosis
         main_screen.ids.speak_btn.disabled = False
         self._show_card(main_screen.ids.result_card)
 
         # Igual que en la web: apenas hay diagnostico, se busca ayuda cercana.
         self.locate_nearby()
+
+    @staticmethod
+    def _make_field_row(label, value):
+        row = MDBoxLayout(adaptive_height=True, spacing=dp(8))
+        row.add_widget(
+            MDLabel(
+                text=f"[b]{label}:[/b]",
+                markup=True,
+                adaptive_height=True,
+                size_hint_x=None,
+                width=dp(96),
+            )
+        )
+        row.add_widget(MDLabel(text=value, adaptive_height=True))
+        return row
 
     @staticmethod
     def _show_card(card):
