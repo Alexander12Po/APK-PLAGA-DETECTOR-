@@ -466,13 +466,33 @@ class AgrowillayApp(MDApp):
         try:
             diagnosis = GeminiClient.analyze_image(image_path, api_key)
         except GeminiClient.GeminiError as exc:
-            Clock.schedule_once(lambda dt: self._on_analysis_error(str(exc)))
+            _write_crash_log(
+                "Error de GeminiClient al analizar (la app sigue abierta):\n"
+                + traceback.format_exc()
+            )
+            Clock.schedule_once(lambda dt: self._on_analysis_error(self._safe_msg(exc)))
             return
         except Exception as exc:  # noqa: BLE001
-            Clock.schedule_once(lambda dt: self._on_analysis_error(str(exc)))
+            _write_crash_log(
+                "Error inesperado al analizar (la app sigue abierta):\n"
+                + traceback.format_exc()
+            )
+            Clock.schedule_once(lambda dt: self._on_analysis_error(self._safe_msg(exc)))
             return
 
         Clock.schedule_once(lambda dt: self._on_analysis_success(diagnosis))
+
+    @staticmethod
+    def _safe_msg(exc):
+        """str(exc) puede salir vacio o literalmente 'None' con ciertos
+        errores de red mal formados; en ese caso mostramos algo util."""
+        text = str(exc).strip()
+        if not text or text == "None":
+            return (
+                "No se pudo conectar con el servidor de la IA. "
+                "Revisa tu conexion a internet e intenta de nuevo."
+            )
+        return text
 
     @mainthread
     def _on_analysis_error(self, message):
@@ -491,18 +511,55 @@ class AgrowillayApp(MDApp):
         main_screen.ids.analyze_spinner.active = False
         Animation(opacity=0, duration=0.2).start(main_screen.ids.analyze_spinner)
 
-        severidad = diagnosis.get("severidad", "media")
+        try:
+            self._render_diagnosis(main_screen, diagnosis)
+        except Exception as exc:  # noqa: BLE001
+            # Pase lo que pase con el formato de la respuesta de la IA, la
+            # app NUNCA debe cerrarse por esto: mostramos un aviso y ya.
+            toast("No se pudo mostrar el diagnostico. Intenta de nuevo.")
+            _write_crash_log(
+                "Error mostrando diagnostico (no crashea la app):\n"
+                + traceback.format_exc()
+                + f"\ndiagnosis recibido: {diagnosis!r}"
+            )
+            return
+
+        self.last_diagnosis = diagnosis
+        main_screen.ids.speak_btn.disabled = False
+        self._show_card(main_screen.ids.result_card)
+
+        # Igual que en la web: apenas hay diagnostico, se busca ayuda cercana.
+        self.locate_nearby()
+
+    @staticmethod
+    def _txt(value, default="-"):
+        """Convierte cualquier valor (incluido None) a texto seguro para
+        mostrar, sin tronar si la IA devolvio null en vez de un string."""
+        if value is None:
+            return default
+        text = str(value).strip()
+        return text if text else default
+
+    def _render_diagnosis(self, main_screen, diagnosis):
+        if not isinstance(diagnosis, dict):
+            diagnosis = {}
+
+        severidad_raw = self._txt(diagnosis.get("severidad"), "media").lower()
         color_map = {"alta": "red_600", "media": "amber_600", "baja": "green_600"}
-        chip_color = hex_to_rgba(COLORS.get(color_map.get(severidad, "amber_600")))
+        chip_color = hex_to_rgba(COLORS.get(color_map.get(severidad_raw, "amber_600")))
 
         body = main_screen.ids.result_body
         body.clear_widgets()
 
         body.add_widget(
-            self._make_field_row("Planta", diagnosis.get("planta_identificada", "-"))
+            self._make_field_row(
+                "Planta", self._txt(diagnosis.get("planta_identificada"))
+            )
         )
         body.add_widget(
-            self._make_field_row("Problema", diagnosis.get("plaga_o_problema", "-"))
+            self._make_field_row(
+                "Problema", self._txt(diagnosis.get("plaga_o_problema"))
+            )
         )
 
         severity_row = MDBoxLayout(adaptive_height=True, spacing=dp(8))
@@ -516,11 +573,15 @@ class AgrowillayApp(MDApp):
             )
         )
         severity_row.add_widget(
-            Factory.SeverityChip(text=severidad.upper(), chip_color=chip_color)
+            Factory.SeverityChip(text=severidad_raw.upper(), chip_color=chip_color)
         )
         body.add_widget(severity_row)
 
-        sintomas = diagnosis.get("sintomas_observados", [])
+        sintomas = diagnosis.get("sintomas_observados") or []
+        if not isinstance(sintomas, list):
+            sintomas = [sintomas]
+        sintomas = [self._txt(s, "") for s in sintomas]
+        sintomas = [s for s in sintomas if s]
         if sintomas:
             body.add_widget(
                 MDLabel(
@@ -538,7 +599,11 @@ class AgrowillayApp(MDApp):
                     )
                 )
 
-        pasos = diagnosis.get("pasos", [])
+        pasos = diagnosis.get("pasos") or []
+        if not isinstance(pasos, list):
+            pasos = [pasos]
+        pasos = [self._txt(p, "") for p in pasos]
+        pasos = [p for p in pasos if p]
         if pasos:
             body.add_widget(
                 MDLabel(
@@ -556,7 +621,7 @@ class AgrowillayApp(MDApp):
                     )
                 )
 
-        prevencion = diagnosis.get("prevencion")
+        prevencion = self._txt(diagnosis.get("prevencion"), "")
         if prevencion:
             body.add_widget(
                 Factory.IconRow(
@@ -566,7 +631,7 @@ class AgrowillayApp(MDApp):
                 )
             )
 
-        urgencia = diagnosis.get("urgencia")
+        urgencia = self._txt(diagnosis.get("urgencia"), "")
         if urgencia:
             body.add_widget(
                 Factory.IconRow(
@@ -575,13 +640,6 @@ class AgrowillayApp(MDApp):
                     text=f"[b]Urgencia:[/b] {urgencia}",
                 )
             )
-
-        self.last_diagnosis = diagnosis
-        main_screen.ids.speak_btn.disabled = False
-        self._show_card(main_screen.ids.result_card)
-
-        # Igual que en la web: apenas hay diagnostico, se busca ayuda cercana.
-        self.locate_nearby()
 
     @staticmethod
     def _make_field_row(label, value):
