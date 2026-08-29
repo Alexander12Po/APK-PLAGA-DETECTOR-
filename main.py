@@ -30,6 +30,7 @@ import webbrowser
 from pathlib import Path
 
 from kivy.animation import Animation
+from kivy.base import ExceptionHandler, ExceptionManager
 from kivy.clock import Clock, mainthread
 from kivy.core.window import Window
 from kivy.factory import Factory
@@ -82,7 +83,7 @@ CAMERA_PHOTO_PATH = str(APP_DATA_DIR / "captura_temp.jpg")
 CAMERA_REQUEST_CODE = 1888
 
 # Modelo de Gemini usado para el diagnóstico (visión + texto)
-GEMINI_MODEL = "gemini-2.5-flash"
+GEMINI_MODEL = "gemini-3.7-flash"
 GEMINI_ENDPOINT = (
     "https://generativelanguage.googleapis.com/v1beta/models/"
     "{model}:generateContent?key={key}"
@@ -95,7 +96,7 @@ GEMINI_ENDPOINT = (
 # PRIVADO. Si en algun momento lo pones publico de nuevo, esta clave
 # quedaria expuesta otra vez y habria que revocarla y generar una nueva
 # (en https://aistudio.google.com/apikey) antes de hacerlo publico.
-DEFAULT_GEMINI_API_KEY = "AQ.Ab8RN6IMp4fXVdton4Pp-oPKjQhpdlrNwr7uADB7OuuP6F4rfA"
+DEFAULT_GEMINI_API_KEY = "AQ.Ab8RN6Lm0f5UBdmiAhvk0-46rp8oACmkd1_n56R-_riaI2y3Cw"
 
 # Mismo prompt que usaba el backend original, para mantener la misma
 # calidad y estructura de diagnóstico.
@@ -411,8 +412,44 @@ class AgrowillayApp(MDApp):
         except Exception as exc:  # noqa: BLE001
             toast(f"Error al procesar la imagen: {exc}")
 
+    @staticmethod
+    def _prepare_image_for_use(path):
+        """Reduce el tamano de la foto si es muy grande.
+
+        Las fotos de camara modernas pueden pesar 4000x3000px o mas. Eso
+        puede agotar la memoria (OOM) tanto al crear la textura para la
+        previsualizacion como al generar el base64 para subir a Gemini, y
+        ese tipo de error puede tumbar la app a nivel NATIVO, sin pasar
+        por ningun try/except de Python (por eso no dejaba log antes).
+        """
+        try:
+            from PIL import Image as PILImage
+
+            img = PILImage.open(path)
+            img = img.convert("RGB")
+            max_side = 1600
+            w, h = img.size
+            if max(w, h) > max_side:
+                scale = max_side / max(w, h)
+                img = img.resize(
+                    (max(1, int(w * scale)), max(1, int(h * scale))),
+                    PILImage.LANCZOS,
+                )
+            out_path = str(APP_DATA_DIR / "preview_resized.jpg")
+            img.save(out_path, "JPEG", quality=85)
+            return out_path
+        except Exception:
+            # Si Pillow no esta disponible o algo sale mal, seguimos con
+            # la imagen original: mejor eso que tronar la app.
+            _write_crash_log(
+                "No se pudo reducir la imagen, se usa la original:\n"
+                + traceback.format_exc()
+            )
+            return path
+
     def _set_preview_image(self, path):
         try:
+            path = self._prepare_image_for_use(path)
             main_screen = self.root.get_screen("main")
             self.current_image_path = path
 
@@ -816,23 +853,62 @@ class AgrowillayApp(MDApp):
 
 
 def _write_crash_log(exc_text):
-    """Si la app truena al arrancar, guarda el error completo en un .txt
-    dentro de la carpeta Descargas del celular, para poder leerlo con
-    cualquier explorador de archivos (sin necesitar cable ni ADB)."""
+    """Guarda el error completo en un .txt.
+
+    IMPORTANTE: se escribe primero en el almacenamiento PRIVADO de la app
+    (APP_DATA_DIR), porque ese siempre se puede escribir sin pedir ningun
+    permiso, ni siquiera en Android 10+ con almacenamiento con alcance.
+    La carpeta publica "Download" puede fallar silenciosamente en
+    versiones recientes de Android si el permiso de almacenamiento no fue
+    concedido, y antes eso dejaba el log sin guardarse y sin avisar nada.
+    """
+    import datetime
+
+    stamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    full_text = f"[{stamp}]\n{exc_text}\n"
+
+    try:
+        APP_DATA_DIR.mkdir(parents=True, exist_ok=True)
+        with open(APP_DATA_DIR / "agrowillay_crash.txt", "a", encoding="utf-8") as f:
+            f.write(full_text + ("-" * 60) + "\n")
+    except Exception:
+        pass
+
+    # Intento extra: tambien copiarlo a Descargas si es posible, para que
+    # sea mas facil de encontrar. Si falla, no importa: ya se guardo arriba.
     try:
         if platform == "android":
             from android.storage import primary_external_storage_path
 
             log_dir = Path(primary_external_storage_path()) / "Download"
-        else:
-            log_dir = APP_DATA_DIR
-        log_dir.mkdir(parents=True, exist_ok=True)
-        (log_dir / "agrowillay_crash.txt").write_text(exc_text, encoding="utf-8")
+            log_dir.mkdir(parents=True, exist_ok=True)
+            with open(log_dir / "agrowillay_crash.txt", "a", encoding="utf-8") as f:
+                f.write(full_text + ("-" * 60) + "\n")
     except Exception:
-        pass  # si ni siquiera esto funciona, no hay mas que hacer aca
+        pass
+
+
+class _GlobalExceptionHandler(ExceptionHandler):
+    """Atrapa CUALQUIER excepcion no manejada que ocurra dentro del loop
+    principal de Kivy (por ejemplo dentro de un callback de Clock que no
+    tenia su propio try/except). Sin esto, ese tipo de error tumbaba la
+    app entera SIN pasar por ningun 'except' de nuestro codigo, y por eso
+    el log nunca se generaba."""
+
+    def handle_exception(self, inst):
+        _write_crash_log(
+            "Excepcion global no capturada (kivy ExceptionManager):\n"
+            + traceback.format_exc()
+        )
+        try:
+            toast("Ocurrio un error, pero la app sigue abierta")
+        except Exception:
+            pass
+        return ExceptionManager.PASS
 
 
 if __name__ == "__main__":
+    ExceptionManager.add_handler(_GlobalExceptionHandler())
     try:
         AgrowillayApp().run()
     except Exception:
