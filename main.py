@@ -403,35 +403,6 @@ class AgrowillayApp(MDApp):
                 + traceback.format_exc()
             )
 
-    def open_settings_dialog(self):
-        from kivymd.uix.textfield import MDTextField
-        from kivymd.uix.dialog import MDDialog
-        from kivymd.uix.button import MDFlatButton
-
-        field = MDTextField(
-            text=ConfigManager.load_api_key() or "",
-            hint_text="Clave API de Gemini",
-            password=True,
-        )
-
-        def _guardar(*_a):
-            nueva = (field.text or "").strip()
-            if nueva:
-                ConfigManager.save_api_key(nueva)
-                toast("Clave guardada correctamente")
-            dialog.dismiss()
-
-        dialog = MDDialog(
-            title="Clave de Gemini",
-            type="custom",
-            content_cls=field,
-            buttons=[
-                MDFlatButton(text="CANCELAR", on_release=lambda x: dialog.dismiss()),
-                MDFlatButton(text="GUARDAR", on_release=_guardar),
-            ],
-        )
-        dialog.open()
-
     @staticmethod
     def _simple_dialog(title, text):
         from kivymd.uix.dialog import MDDialog
@@ -467,8 +438,7 @@ class AgrowillayApp(MDApp):
             "1) Toma o sube una foto de la planta.\n"
             "2) Toca 'Analizar planta'.\n"
             "3) Revisa el diagnostico y la ayuda cercana.\n\n"
-            "Si algo falla, revisa tu conexion a internet o tu clave "
-            "de Gemini en Mas > Clave de Gemini.",
+            "Si algo falla, revisa tu conexion a internet e intenta de nuevo.",
         )
 
     # ------------------------------------------------------------------

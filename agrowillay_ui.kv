@@ -7,7 +7,7 @@ RootLayout:
 # Piezas de diseno reutilizables
 # ---------------------------------------------------------------------------
 
-<StepBadge@MDBoxLayout>:
+<StepBadge@FloatLayout>:
     icon: "numeric-1"
     size_hint: None, None
     size: dp(44), dp(44)
@@ -117,7 +117,7 @@ RootLayout:
             pos: self.x - dp(60), self.y - dp(60)
             size: dp(140), dp(140)
 
-    MDBoxLayout:
+    FloatLayout:
         size_hint: None, None
         size: dp(60), dp(60)
         pos_hint: {"center_x": 0.5}
@@ -198,7 +198,7 @@ RootLayout:
         markup: True
         adaptive_height: True
 
-<RoundIconButton@ButtonBehavior+MDBoxLayout>:
+<RoundIconButton@ButtonBehavior+FloatLayout>:
     icon: "volume-high"
     size_hint: None, None
     size: dp(52), dp(52)
@@ -249,7 +249,7 @@ RootLayout:
             size: self.size
             radius: [18,]
 
-    MDBoxLayout:
+    FloatLayout:
         size_hint: None, None
         size: dp(38), dp(38)
         canvas.before:
@@ -302,7 +302,7 @@ RootLayout:
         adaptive_size: True
         spacing: dp(6)
 
-        MDBoxLayout:
+        FloatLayout:
             size_hint: None, None
             size: dp(22), dp(22)
             canvas.before:
@@ -569,16 +569,35 @@ RootLayout:
                         subtitle_text: "Viveros y tiendas"
                         on_release: app.home_show_help()
 
+                Image:
+                    source: "illustrations/potted_plant.png"
+                    size_hint_y: None
+                    height: dp(120)
+                    allow_stretch: True
+                    keep_ratio: True
+
                 SimpleTip:
                     icon: "leaf"
                     title_text: "Consejo del dia"
                     body_text: "Revisa regularmente el enves de las hojas, ahi suelen esconderse muchas plagas."
 
-                MDLabel:
-                    text: "Como funciona?"
-                    font_style: "H6"
-                    bold: True
+                MDBoxLayout:
                     adaptive_height: True
+                    spacing: dp(8)
+
+                    Image:
+                        source: "illustrations/glow_sphere.png"
+                        size_hint: None, None
+                        size: dp(36), dp(36)
+                        allow_stretch: True
+                        keep_ratio: True
+
+                    MDLabel:
+                        text: "Como funciona?"
+                        font_style: "H6"
+                        bold: True
+                        adaptive_height: True
+                        valign: "middle"
 
                 MDGridLayout:
                     cols: 2
@@ -635,10 +654,21 @@ RootLayout:
                 # ---------------- PASO 1: FOTO ----------------
                 SectionCard:
 
-                    StepHeader:
-                        icon: "camera-outline"
-                        title_text: "Fotografia la planta"
-                        subtitle_text: "Usa buena luz natural y enfoca la zona afectada."
+                    MDBoxLayout:
+                        adaptive_height: True
+                        spacing: dp(10)
+
+                        StepHeader:
+                            icon: "camera-outline"
+                            title_text: "Fotografia la planta"
+                            subtitle_text: "Usa buena luz natural y enfoca la zona afectada."
+
+                        Image:
+                            source: "illustrations/magnifier_leaf.png"
+                            size_hint: None, None
+                            size: dp(48), dp(48)
+                            allow_stretch: True
+                            keep_ratio: True
 
                     FloatLayout:
                         size_hint_y: None
@@ -807,11 +837,13 @@ RootLayout:
                     spacing: dp(10)
                     padding: dp(20), dp(40)
 
-                    MDIcon:
-                        icon: "clipboard-text-outline"
-                        halign: "center"
-                        theme_text_color: "Hint"
-                        font_size: "42sp"
+                    Image:
+                        source: "illustrations/robot_mascot.png"
+                        size_hint: None, None
+                        size: dp(140), dp(140)
+                        pos_hint: {"center_x": 0.5}
+                        allow_stretch: True
+                        keep_ratio: True
 
                     MDLabel:
                         text: "Aun no tienes diagnosticos"
@@ -918,11 +950,6 @@ RootLayout:
                 adaptive_height: True
                 padding: [dp(8), dp(16), dp(8), dp(30)]
                 spacing: dp(4)
-
-                MoreListItem:
-                    icon: "key-outline"
-                    text: "Clave de Gemini"
-                    on_release: app.open_settings_dialog()
 
                 MoreListItem:
                     icon: "translate"
