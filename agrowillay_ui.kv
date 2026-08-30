@@ -227,7 +227,7 @@ RootLayout:
 
 # Tarjeta de "Acciones rapidas" en Inicio: icono + titulo + subtitulo,
 # con ripple al tocar.
-<QuickAction@ButtonBehavior+MDCard>:
+<QuickAction@ButtonBehavior+MDBoxLayout>:
     icon: "camera-outline"
     icon_bg: 0.90, 0.96, 0.93, 1
     title_text: ""
@@ -237,12 +237,19 @@ RootLayout:
     height: dp(118)
     padding: dp(14)
     spacing: dp(6)
-    radius: [18, 18, 18, 18]
-    elevation: 0
-    shadow_softness: 16
-    shadow_offset: (0, -3)
-    shadow_color: 0, 0, 0, 0.12
-    md_bg_color: 1, 1, 1, 1
+    canvas.before:
+        Color:
+            rgba: 0, 0, 0, 0.08
+        RoundedRectangle:
+            pos: self.x, self.y - dp(3)
+            size: self.size
+            radius: [18,]
+        Color:
+            rgba: 1, 1, 1, 1
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [18,]
 
     MDBoxLayout:
         size_hint: None, None

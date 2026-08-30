@@ -57,14 +57,25 @@ from kivy.utils import platform
 if platform == "android":
     from android.permissions import Permission, request_permissions
 
-    request_permissions(
-        [
-            Permission.INTERNET,
-            Permission.CAMERA,
-            Permission.ACCESS_FINE_LOCATION,
-            Permission.ACCESS_COARSE_LOCATION,
-        ]
-    )
+    _permisos = [
+        Permission.INTERNET,
+        Permission.CAMERA,
+        Permission.ACCESS_FINE_LOCATION,
+        Permission.ACCESS_COARSE_LOCATION,
+    ]
+    # En Android 12 y anteriores existen estos permisos; en 13+ ya no
+    # existen (dan error si se piden) y se reemplazan por READ_MEDIA_IMAGES.
+    try:
+        _permisos.append(Permission.WRITE_EXTERNAL_STORAGE)
+        _permisos.append(Permission.READ_EXTERNAL_STORAGE)
+    except AttributeError:
+        pass
+    try:
+        _permisos.append(Permission.READ_MEDIA_IMAGES)
+    except AttributeError:
+        pass
+
+    request_permissions(_permisos)
     from android.storage import app_storage_path
 
     APP_DATA_DIR = Path(app_storage_path())
