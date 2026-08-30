@@ -25,6 +25,7 @@ import base64
 import json
 import os
 import threading
+import time
 import traceback
 import webbrowser
 from pathlib import Path
@@ -233,10 +234,31 @@ class GeminiClient:
             },
         }
 
-        try:
-            resp = requests.post(url, json=payload, timeout=45)
-        except requests.exceptions.RequestException as exc:
-            raise cls.GeminiError(f"Error de conexión: {exc}") from exc
+        # Reintentos con espera creciente: 503 (servidor saturado) y los
+        # cortes de conexion son casi siempre temporales (wifi/datos
+        # inestables o un pico de demanda pasajero en Gemini), asi que
+        # vale la pena reintentar antes de mostrarle el error al usuario.
+        max_intentos = 3
+        ultimo_error = None
+        for intento in range(1, max_intentos + 1):
+            try:
+                resp = requests.post(url, json=payload, timeout=45)
+            except requests.exceptions.RequestException as exc:
+                ultimo_error = cls.GeminiError(f"Error de conexión: {exc}")
+                if intento < max_intentos:
+                    time.sleep(2 * intento)
+                    continue
+                raise ultimo_error from exc
+
+            if resp.status_code in (429, 500, 503, 504) and intento < max_intentos:
+                ultimo_error = cls.GeminiError(
+                    f"La API de Gemini respondió con error {resp.status_code}: "
+                    f"{resp.text[:200]}"
+                )
+                time.sleep(2 * intento)
+                continue
+
+            break
 
         if resp.status_code != 200:
             raise cls.GeminiError(
@@ -267,10 +289,27 @@ class MainScreen(Screen):
     pass
 
 
+class HomeScreen(Screen):
+    pass
+
+
+class HistoryScreen(Screen):
+    pass
+
+
+class TipsScreen(Screen):
+    pass
+
+
+class MoreScreen(Screen):
+    pass
+
+
 class AgrowillayApp(MDApp):
     theme_color = hex_to_rgba(COLORS["green_600"])
     current_image_path = StringProperty("")
     last_diagnosis = ObjectProperty(None, allownone=True)
+    current_tab = StringProperty("home")
 
     def build(self):
         self.title = "Agrowillay"
@@ -280,6 +319,145 @@ class AgrowillayApp(MDApp):
             os.path.dirname(os.path.abspath(__file__)), "agrowillay_ui.kv"
         )
         return Builder.load_file(kv_path)
+
+    # ------------------------------------------------------------------
+    # Navegacion entre pantallas (barra inferior)
+    # ------------------------------------------------------------------
+
+    def _go(self, screen_name, tab_name):
+        try:
+            self.root.ids.sm.current = screen_name
+            self.current_tab = tab_name
+        except Exception:  # noqa: BLE001
+            _write_crash_log(
+                f"Error navegando a {screen_name} (no crashea la app):\n"
+                + traceback.format_exc()
+            )
+
+    def go_home(self):
+        self._go("home", "home")
+
+    def go_diagnosis(self):
+        self._go("main", "diagnosis")
+
+    def go_history(self):
+        self._go("history", "history")
+        self._refresh_history()
+
+    def go_tips(self):
+        self._go("tips", "tips")
+
+    def go_more(self):
+        self._go("more", "more")
+
+    def home_take_photo(self):
+        self.go_diagnosis()
+        self.take_photo()
+
+    def home_choose_gallery(self):
+        self.go_diagnosis()
+        self.choose_from_gallery()
+
+    def home_show_help(self):
+        if self.last_diagnosis:
+            self.go_diagnosis()
+        else:
+            toast("Primero analiza una planta para ver ayuda cercana")
+
+    def _refresh_history(self):
+        """Muestra el ultimo diagnostico de la sesion en la pestana
+        'Diagnosticos'. No hay base de datos todavia, asi que por ahora
+        solo se conserva el ultimo resultado en memoria."""
+        try:
+            history_screen = self.root.ids.sm.get_screen("history")
+        except Exception:
+            return
+
+        try:
+            placeholder = history_screen.ids.history_placeholder
+            last_card = history_screen.ids.history_last_card
+            body = history_screen.ids.history_body
+            if self.last_diagnosis:
+                body.clear_widgets()
+                self._render_diagnosis(body, self.last_diagnosis)
+                self._hide_card(placeholder)
+                self._show_card(last_card)
+            else:
+                self._show_card(placeholder)
+                self._hide_card(last_card)
+        except Exception:  # noqa: BLE001
+            _write_crash_log(
+                "Error refrescando historial (no crashea la app):\n"
+                + traceback.format_exc()
+            )
+
+    def open_settings_dialog(self):
+        from kivymd.uix.textfield import MDTextField
+        from kivymd.uix.dialog import MDDialog
+        from kivymd.uix.button import MDFlatButton
+
+        field = MDTextField(
+            text=ConfigManager.load_api_key() or "",
+            hint_text="Clave API de Gemini",
+            password=True,
+        )
+
+        def _guardar(*_a):
+            nueva = (field.text or "").strip()
+            if nueva:
+                ConfigManager.save_api_key(nueva)
+                toast("Clave guardada correctamente")
+            dialog.dismiss()
+
+        dialog = MDDialog(
+            title="Clave de Gemini",
+            type="custom",
+            content_cls=field,
+            buttons=[
+                MDFlatButton(text="CANCELAR", on_release=lambda x: dialog.dismiss()),
+                MDFlatButton(text="GUARDAR", on_release=_guardar),
+            ],
+        )
+        dialog.open()
+
+    @staticmethod
+    def _simple_dialog(title, text):
+        from kivymd.uix.dialog import MDDialog
+        from kivymd.uix.button import MDFlatButton
+
+        dialog = MDDialog(
+            title=title,
+            text=text,
+            buttons=[
+                MDFlatButton(text="CERRAR", on_release=lambda x: dialog.dismiss())
+            ],
+        )
+        dialog.open()
+
+    def show_language_options(self):
+        self._simple_dialog(
+            "Idioma",
+            "El cambio de idioma Espanol/Quechua estara disponible "
+            "proximamente para toda la app.",
+        )
+
+    def show_about_dialog(self):
+        self._simple_dialog(
+            "Acerca de Agrowillay",
+            "Agrowillay ayuda a identificar plagas y enfermedades en "
+            "plantas usando inteligencia artificial, pensada para "
+            "agricultores de Curahuasi y la region de Apurimac.",
+        )
+
+    def show_help_dialog(self):
+        self._simple_dialog(
+            "Ayuda",
+            "1) Toma o sube una foto de la planta.\n"
+            "2) Toca 'Analizar planta'.\n"
+            "3) Revisa el diagnostico y la ayuda cercana.\n\n"
+            "Si algo falla, revisa tu conexion a internet o tu clave "
+            "de Gemini en Mas > Clave de Gemini.",
+        )
 
     # ------------------------------------------------------------------
     # Paso 1: seleccionar / tomar foto
@@ -450,7 +628,7 @@ class AgrowillayApp(MDApp):
     def _set_preview_image(self, path):
         try:
             path = self._prepare_image_for_use(path)
-            main_screen = self.root.get_screen("main")
+            main_screen = self.root.ids.sm.get_screen("main")
             self.current_image_path = path
 
             preview = main_screen.ids.preview_image
@@ -485,7 +663,7 @@ class AgrowillayApp(MDApp):
             toast("No hay una clave de Gemini configurada en la app")
             return
 
-        main_screen = self.root.get_screen("main")
+        main_screen = self.root.ids.sm.get_screen("main")
         main_screen.ids.analyze_btn.disabled = True
         main_screen.ids.analyze_btn.text = "Analizando..."
         main_screen.ids.analyze_spinner.active = True
@@ -539,7 +717,7 @@ class AgrowillayApp(MDApp):
 
     @mainthread
     def _on_analysis_error(self, message):
-        main_screen = self.root.get_screen("main")
+        main_screen = self.root.ids.sm.get_screen("main")
         main_screen.ids.analyze_btn.disabled = False
         main_screen.ids.analyze_btn.text = "Analizar planta"
         main_screen.ids.analyze_spinner.active = False
@@ -548,14 +726,14 @@ class AgrowillayApp(MDApp):
 
     @mainthread
     def _on_analysis_success(self, diagnosis):
-        main_screen = self.root.get_screen("main")
+        main_screen = self.root.ids.sm.get_screen("main")
         main_screen.ids.analyze_btn.disabled = False
         main_screen.ids.analyze_btn.text = "Analizar planta"
         main_screen.ids.analyze_spinner.active = False
         Animation(opacity=0, duration=0.2).start(main_screen.ids.analyze_spinner)
 
         try:
-            self._render_diagnosis(main_screen, diagnosis)
+            self._render_diagnosis(main_screen.ids.result_body, diagnosis)
         except Exception as exc:  # noqa: BLE001
             # Pase lo que pase con el formato de la respuesta de la IA, la
             # app NUNCA debe cerrarse por esto: mostramos un aviso y ya.
@@ -568,9 +746,17 @@ class AgrowillayApp(MDApp):
             return
 
         self.last_diagnosis = diagnosis
+        self._refresh_history()
 
         try:
-            main_screen.ids.speak_btn.disabled = False
+            speak_btn = main_screen.ids.speak_btn
+            speak_btn.disabled = False
+            Animation.cancel_all(speak_btn, "size")
+            base_size = speak_btn.size[:]
+            speak_btn.size = (base_size[0] * 0.6, base_size[1] * 0.6)
+            Animation(
+                size=base_size, duration=0.35, t="out_back"
+            ).start(speak_btn)
             self._show_card(main_screen.ids.result_card)
 
             # Igual que en la web: apenas hay diagnostico, se busca ayuda cercana.
@@ -593,7 +779,7 @@ class AgrowillayApp(MDApp):
         text = str(value).strip()
         return text if text else default
 
-    def _render_diagnosis(self, main_screen, diagnosis):
+    def _render_diagnosis(self, body, diagnosis):
         if not isinstance(diagnosis, dict):
             diagnosis = {}
 
@@ -601,7 +787,6 @@ class AgrowillayApp(MDApp):
         color_map = {"alta": "red_600", "media": "amber_600", "baja": "green_600"}
         chip_color = hex_to_rgba(COLORS.get(color_map.get(severidad_raw, "amber_600")))
 
-        body = main_screen.ids.result_body
         body.clear_widgets()
 
         body.add_widget(
@@ -712,13 +897,17 @@ class AgrowillayApp(MDApp):
     @staticmethod
     def _show_card(card):
         card.disabled = False
-        Animation.cancel_all(card, "opacity")
-        Animation(opacity=1, duration=0.4, t="out_quad").start(card)
+        Animation.cancel_all(card, "opacity", "y")
+        target_y = card.y
+        card.y = target_y - dp(16)
+        Animation(
+            opacity=1, y=target_y, duration=0.45, t="out_cubic"
+        ).start(card)
 
     @staticmethod
     def _hide_card(card):
         card.disabled = True
-        Animation.cancel_all(card, "opacity")
+        Animation.cancel_all(card, "opacity", "y")
         Animation(opacity=0, duration=0.2, t="out_quad").start(card)
 
     # ------------------------------------------------------------------
@@ -727,7 +916,7 @@ class AgrowillayApp(MDApp):
     # ------------------------------------------------------------------
 
     def locate_nearby(self):
-        main_screen = self.root.get_screen("main")
+        main_screen = self.root.ids.sm.get_screen("main")
 
         try:
             self._show_card(main_screen.ids.locator_card)
@@ -749,7 +938,7 @@ class AgrowillayApp(MDApp):
                 pass
 
     def _gps_timeout_check(self, dt):
-        main_screen = self.root.get_screen("main")
+        main_screen = self.root.ids.sm.get_screen("main")
         if not main_screen.ids.locator_body.children:
             self._render_manual_search()
 
@@ -774,7 +963,7 @@ class AgrowillayApp(MDApp):
             ("Tiendas de jardineria", "tienda de jardineria"),
             ("Agronomos e ingenieros agricolas", "ingeniero agronomo"),
         ]
-        main_screen = self.root.get_screen("main")
+        main_screen = self.root.ids.sm.get_screen("main")
         box = main_screen.ids.locator_body
         box.clear_widgets()
         for label, query in categorias:
@@ -790,7 +979,7 @@ class AgrowillayApp(MDApp):
             ("Tiendas de jardineria", "tienda de jardineria cerca de mi"),
             ("Agronomos e ingenieros agricolas", "ingeniero agronomo cerca de mi"),
         ]
-        main_screen = self.root.get_screen("main")
+        main_screen = self.root.ids.sm.get_screen("main")
         box = main_screen.ids.locator_body
         box.clear_widgets()
         for label, query in categorias:
