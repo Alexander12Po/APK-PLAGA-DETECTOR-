@@ -242,6 +242,7 @@ class GeminiClient:
             "generationConfig": {
                 "response_mime_type": "application/json",
                 "max_output_tokens": 2048,
+                "thinkingConfig": {"thinkingLevel": "low"},
             },
         }
 
@@ -253,7 +254,7 @@ class GeminiClient:
         ultimo_error = None
         for intento in range(1, max_intentos + 1):
             try:
-                resp = requests.post(url, json=payload, timeout=45)
+                resp = requests.post(url, json=payload, timeout=60)
             except requests.exceptions.RequestException as exc:
                 ultimo_error = cls.GeminiError(f"Error de conexión: {exc}")
                 if intento < max_intentos:

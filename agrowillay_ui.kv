@@ -59,18 +59,24 @@ RootLayout:
             font_style: "Caption"
             adaptive_height: True
 
-<SectionCard@MDCard>:
+<SectionCard@MDBoxLayout>:
     orientation: "vertical"
     padding: dp(20)
     spacing: dp(16)
     adaptive_height: True
-    radius: [22, 22, 22, 22]
-    elevation: 0
-    shadow_softness: 22
-    shadow_offset: (0, -4)
-    shadow_color: 0, 0, 0, 0.16
-    md_bg_color: 1, 1, 1, 1
-    line_color: 0, 0, 0, 0.05
+    canvas.before:
+        Color:
+            rgba: 0, 0, 0, 0.08
+        RoundedRectangle:
+            pos: self.x, self.y - dp(3)
+            size: self.size
+            radius: [22,]
+        Color:
+            rgba: 1, 1, 1, 1
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [22,]
 
 <PillButton@MDRaisedButton>:
     md_bg_color: app.theme_color
@@ -79,7 +85,6 @@ RootLayout:
     size_hint_x: 1
     height: dp(50)
     font_size: "15sp"
-    radius: [14, 14, 14, 14]
 
 <GhostButton@MDFlatButton>:
     md_bg_color: 0.925, 0.965, 0.949, 1
@@ -88,19 +93,12 @@ RootLayout:
     size_hint_x: 1
     height: dp(50)
     font_size: "15sp"
-    radius: [14, 14, 14, 14]
 
-<HeroCard@MDCard>:
+<HeroCard@MDBoxLayout>:
     orientation: "vertical"
     adaptive_height: True
     padding: dp(28), dp(30)
     spacing: dp(10)
-    radius: [26, 26, 26, 26]
-    elevation: 0
-    shadow_softness: 26
-    shadow_offset: (0, -6)
-    shadow_color: 0, 0, 0, 0.22
-    md_bg_color: app.theme_color
     canvas.before:
         Color:
             rgba: app.theme_color
@@ -335,7 +333,7 @@ RootLayout:
         adaptive_height: True
 
 # Item de texto simple para pantallas Consejos / Mas
-<SimpleTip@MDCard>:
+<SimpleTip@MDBoxLayout>:
     icon: "leaf"
     title_text: ""
     body_text: ""
@@ -343,12 +341,19 @@ RootLayout:
     adaptive_height: True
     padding: dp(18)
     spacing: dp(6)
-    radius: [18, 18, 18, 18]
-    elevation: 0
-    shadow_softness: 16
-    shadow_offset: (0, -3)
-    shadow_color: 0, 0, 0, 0.1
-    md_bg_color: 1, 1, 1, 1
+    canvas.before:
+        Color:
+            rgba: 0, 0, 0, 0.06
+        RoundedRectangle:
+            pos: self.x, self.y - dp(2)
+            size: self.size
+            radius: [18,]
+        Color:
+            rgba: 1, 1, 1, 1
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [18,]
 
     MDBoxLayout:
         adaptive_height: True
@@ -441,16 +446,23 @@ RootLayout:
         TipsScreen:
         MoreScreen:
 
-    MDCard:
+    MDBoxLayout:
         size_hint_y: None
         height: dp(68)
-        radius: [22, 22, 0, 0]
-        elevation: 0
-        shadow_softness: 20
-        shadow_offset: (0, 4)
-        shadow_color: 0, 0, 0, 0.18
-        md_bg_color: 1, 1, 1, 1
         padding: dp(4), 0
+        canvas.before:
+            Color:
+                rgba: 0, 0, 0, 0.1
+            RoundedRectangle:
+                pos: self.x, self.y + dp(2)
+                size: self.size
+                radius: [22, 22, 0, 0]
+            Color:
+                rgba: 1, 1, 1, 1
+            RoundedRectangle:
+                pos: self.pos
+                size: self.size
+                radius: [22, 22, 0, 0]
 
         MDBoxLayout:
 
@@ -474,7 +486,7 @@ RootLayout:
                     icon: "leaf"
                     md_bg_color: app.theme_color
                     pos_hint: {"center_x": 0.5, "center_y": 0.62}
-                    elevation: 4
+                    elevation: 0
                     on_release: app.go_diagnosis()
 
             NavButton:
