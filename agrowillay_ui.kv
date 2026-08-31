@@ -285,6 +285,7 @@ RootLayout:
     MDBoxLayout:
         adaptive_size: True
         spacing: dp(6)
+        pos_hint: {"center_x": 0.5}
 
         FloatLayout:
             size_hint: None, None
@@ -314,6 +315,10 @@ RootLayout:
     MDLabel:
         text: root.text
         font_style: "Caption"
+        halign: "center"
+        theme_text_color: "Custom"
+        text_color: 0.063, 0.098, 0.082, 1
+        text_size: self.width, None
         adaptive_height: True
 
 # Item de texto simple para pantallas Consejos / Mas
