@@ -96,6 +96,9 @@ CAMERA_REQUEST_CODE = 1888
 
 # Modelo de Gemini usado para el diagnóstico (visión + texto)
 GEMINI_MODEL = "gemini-3.7-flash"
+# Si el modelo principal esta saturado (error 503) tras varios reintentos,
+# se prueba con este modelo de respaldo, mucho mas antiguo y estable.
+GEMINI_MODEL_FALLBACK = "gemini-2.5-flash"
 GEMINI_ENDPOINT = (
     "https://generativelanguage.googleapis.com/v1beta/models/"
     "{model}:generateContent?key={key}"
@@ -224,7 +227,10 @@ class GeminiClient:
         elif image_path.lower().endswith(".webp"):
             mime_type = "image/webp"
 
-        url = GEMINI_ENDPOINT.format(model=GEMINI_MODEL, key=api_key)
+        url_principal = GEMINI_ENDPOINT.format(model=GEMINI_MODEL, key=api_key)
+        url_respaldo = GEMINI_ENDPOINT.format(
+            model=GEMINI_MODEL_FALLBACK, key=api_key
+        )
         payload = {
             "contents": [
                 {
@@ -248,28 +254,44 @@ class GeminiClient:
 
         # Reintentos con espera creciente: 503 (servidor saturado) y los
         # cortes de conexion son casi siempre temporales (wifi/datos
-        # inestables o un pico de demanda pasajero en Gemini), asi que
-        # vale la pena reintentar antes de mostrarle el error al usuario.
-        max_intentos = 3
+        # inestables o un pico de demanda pasajero en Gemini). Si el
+        # modelo principal sigue sin responder despues de sus reintentos,
+        # se prueba automaticamente con el modelo de respaldo antes de
+        # mostrarle el error al usuario.
+        intentos_por_modelo = 2
+        urls = [
+            (GEMINI_MODEL, url_principal),
+            (GEMINI_MODEL_FALLBACK, url_respaldo),
+        ]
         ultimo_error = None
-        for intento in range(1, max_intentos + 1):
-            try:
-                resp = requests.post(url, json=payload, timeout=60)
-            except requests.exceptions.RequestException as exc:
-                ultimo_error = cls.GeminiError(f"Error de conexión: {exc}")
-                if intento < max_intentos:
+        resp = None
+        for nombre_modelo, url in urls:
+            for intento in range(1, intentos_por_modelo + 1):
+                es_ultimo_intento_global = (
+                    nombre_modelo == urls[-1][0] and intento == intentos_por_modelo
+                )
+                try:
+                    resp = requests.post(url, json=payload, timeout=60)
+                except requests.exceptions.RequestException as exc:
+                    ultimo_error = cls.GeminiError(f"Error de conexión: {exc}")
+                    if es_ultimo_intento_global:
+                        raise ultimo_error from exc
                     time.sleep(2 * intento)
                     continue
-                raise ultimo_error from exc
 
-            if resp.status_code in (429, 500, 503, 504) and intento < max_intentos:
-                ultimo_error = cls.GeminiError(
-                    f"La API de Gemini respondió con error {resp.status_code}: "
-                    f"{resp.text[:200]}"
-                )
-                time.sleep(2 * intento)
+                if resp.status_code in (429, 500, 503, 504):
+                    ultimo_error = cls.GeminiError(
+                        f"La API de Gemini ({nombre_modelo}) respondió con "
+                        f"error {resp.status_code}: {resp.text[:200]}"
+                    )
+                    if es_ultimo_intento_global:
+                        raise ultimo_error
+                    time.sleep(2 * intento)
+                    continue
+
+                break
+            else:
                 continue
-
             break
 
         if resp.status_code != 200:
@@ -630,6 +652,24 @@ class AgrowillayApp(MDApp):
             self.last_diagnosis = None
         except Exception as exc:  # noqa: BLE001
             toast(f"No se pudo mostrar la imagen: {exc}")
+
+    def clear_photo(self):
+        """Quita la foto seleccionada y vuelve al estado 'sin foto'."""
+        main_screen = self.root.ids.sm.get_screen("main")
+        self.current_image_path = ""
+
+        preview = main_screen.ids.preview_image
+        Animation.cancel_all(preview, "opacity")
+        preview.opacity = 0
+        preview.source = ""
+
+        main_screen.ids.preview_placeholder.opacity = 1
+        main_screen.ids.analyze_btn.disabled = True
+
+        self._hide_card(main_screen.ids.result_card)
+        self._hide_card(main_screen.ids.locator_card)
+        main_screen.ids.speak_btn.disabled = True
+        self.last_diagnosis = None
 
     # ------------------------------------------------------------------
     # Paso 2: analizar con Gemini (en un hilo aparte -> no bloquea la UI)
