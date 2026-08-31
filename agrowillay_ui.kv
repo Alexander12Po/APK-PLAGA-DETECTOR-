@@ -72,7 +72,7 @@ RootLayout:
             size: self.size
             radius: [22,]
         Color:
-            rgba: 1, 1, 1, 1
+            rgba: 0.09, 0.075, 0.13, 1
         RoundedRectangle:
             pos: self.pos
             size: self.size
@@ -227,7 +227,7 @@ RootLayout:
             size: self.size
             radius: [18,]
         Color:
-            rgba: 1, 1, 1, 1
+            rgba: 0.09, 0.075, 0.13, 1
         RoundedRectangle:
             pos: self.pos
             size: self.size
@@ -333,7 +333,7 @@ RootLayout:
             size: self.size
             radius: [18,]
         Color:
-            rgba: 1, 1, 1, 1
+            rgba: 0.09, 0.075, 0.13, 1
         RoundedRectangle:
             pos: self.pos
             size: self.size
@@ -401,6 +401,7 @@ RootLayout:
     MDIcon:
         icon: root.icon
         halign: "center"
+        text_size: self.width, None
         theme_text_color: "Custom"
         text_color: app.theme_color if root.active else (0.6, 0.63, 0.61, 1)
         font_size: "22sp"
@@ -442,7 +443,7 @@ RootLayout:
                 size: self.size
                 radius: [22, 22, 0, 0]
             Color:
-                rgba: 1, 1, 1, 1
+                rgba: 0.09, 0.075, 0.13, 1
             RoundedRectangle:
                 pos: self.pos
                 size: self.size
@@ -492,7 +493,7 @@ RootLayout:
 
     MDBoxLayout:
         orientation: "vertical"
-        md_bg_color: 0.955, 0.965, 0.96, 1
+        md_bg_color: 0.043, 0.035, 0.07, 1
 
         MDTopAppBar:
             title: "Agrowillay"
@@ -843,6 +844,7 @@ RootLayout:
 
                     MDBoxLayout:
                         spacing: dp(14)
+                        adaptive_height: True
 
                         MDBoxLayout:
                             orientation: "vertical"
@@ -1133,7 +1135,7 @@ RootLayout:
 
     MDBoxLayout:
         orientation: "vertical"
-        md_bg_color: 0.955, 0.965, 0.96, 1
+        md_bg_color: 0.043, 0.035, 0.07, 1
 
         MDTopAppBar:
             title: "Mis diagnosticos"
@@ -1203,7 +1205,7 @@ RootLayout:
 
     MDBoxLayout:
         orientation: "vertical"
-        md_bg_color: 0.955, 0.965, 0.96, 1
+        md_bg_color: 0.043, 0.035, 0.07, 1
 
         MDTopAppBar:
             title: "Consejos"
@@ -1254,7 +1256,7 @@ RootLayout:
 
     MDBoxLayout:
         orientation: "vertical"
-        md_bg_color: 0.955, 0.965, 0.96, 1
+        md_bg_color: 0.043, 0.035, 0.07, 1
 
         MDTopAppBar:
             title: "Mas opciones"

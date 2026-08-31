@@ -348,6 +348,7 @@ class AgrowillayApp(MDApp):
     def build(self):
         self.title = "Agrowillay"
         self.theme_cls.primary_palette = "Green"
+        self.theme_cls.theme_style = "Dark"
         self.icon = "assets/icon.png"
         kv_path = os.path.join(
             os.path.dirname(os.path.abspath(__file__)), "agrowillay_ui.kv"
