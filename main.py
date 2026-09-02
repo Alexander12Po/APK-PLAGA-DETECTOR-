@@ -926,6 +926,21 @@ class AgrowillayApp(MDApp):
         text = str(value).strip()
         return text if text else default
 
+    @staticmethod
+    def _make_widget(cls_name, **kwargs):
+        """Crea un widget de una clase dinamica del .kv (definida con @,
+        como SeverityChip o IconRow) SIN pasarle propiedades al
+        constructor. En KivyMD, MDBoxLayout mezcla BackgroundColorBehavior,
+        cuyo __init__ propio no reconoce las propiedades que agrega la
+        regla del .kv (ej. 'chip_color', 'icon_color') si se las pasamos
+        como kwargs -> TypeError: 'may not be existing property names'.
+        Crear el widget vacio y asignar los atributos despues evita el
+        problema por completo (confirmado con el traceback real)."""
+        widget = getattr(Factory, cls_name)()
+        for key, value in kwargs.items():
+            setattr(widget, key, value)
+        return widget
+
     def _render_diagnosis(self, body, diagnosis):
         if not isinstance(diagnosis, dict):
             diagnosis = {}
@@ -958,7 +973,9 @@ class AgrowillayApp(MDApp):
             )
         )
         severity_row.add_widget(
-            Factory.SeverityChip(text=severidad_raw.upper(), chip_color=chip_color)
+            self._make_widget(
+                "SeverityChip", text=severidad_raw.upper(), chip_color=chip_color
+            )
         )
         body.add_widget(severity_row)
 
@@ -977,7 +994,8 @@ class AgrowillayApp(MDApp):
             )
             for sintoma in sintomas:
                 body.add_widget(
-                    Factory.IconRow(
+                    self._make_widget(
+                        "IconRow",
                         icon="alert-circle-outline",
                         icon_color=hex_to_rgba(COLORS["amber_600"]),
                         text=sintoma,
@@ -999,7 +1017,8 @@ class AgrowillayApp(MDApp):
             )
             for paso in pasos:
                 body.add_widget(
-                    Factory.IconRow(
+                    self._make_widget(
+                        "IconRow",
                         icon="check-circle-outline",
                         icon_color=self.theme_color,
                         text=paso,
@@ -1009,7 +1028,8 @@ class AgrowillayApp(MDApp):
         prevencion = self._txt(diagnosis.get("prevencion"), "")
         if prevencion:
             body.add_widget(
-                Factory.IconRow(
+                self._make_widget(
+                    "IconRow",
                     icon="shield-check-outline",
                     icon_color=self.theme_color,
                     text=f"[b]Prevencion:[/b] {prevencion}",
@@ -1019,7 +1039,8 @@ class AgrowillayApp(MDApp):
         urgencia = self._txt(diagnosis.get("urgencia"), "")
         if urgencia:
             body.add_widget(
-                Factory.IconRow(
+                self._make_widget(
+                    "IconRow",
                     icon="clock-alert-outline",
                     icon_color=hex_to_rgba(COLORS["red_600"]),
                     text=f"[b]Urgencia:[/b] {urgencia}",
@@ -1131,7 +1152,8 @@ class AgrowillayApp(MDApp):
 
         if not riesgos:
             box.add_widget(
-                Factory.IconRow(
+                self._make_widget(
+                    "IconRow",
                     icon="check-circle-outline",
                     icon_color=self.theme_color,
                     text="Sin riesgos climaticos relevantes en los proximos 3 dias.",
@@ -1142,7 +1164,8 @@ class AgrowillayApp(MDApp):
         for riesgo in riesgos:
             color_key = "red_600" if riesgo["nivel"] == "alta" else "amber_600"
             box.add_widget(
-                Factory.IconRow(
+                self._make_widget(
+                    "IconRow",
                     icon="alert-outline",
                     icon_color=hex_to_rgba(COLORS[color_key]),
                     text=(
