@@ -96,10 +96,10 @@ CAMERA_PHOTO_PATH = str(APP_DATA_DIR / "captura_temp.jpg")
 CAMERA_REQUEST_CODE = 1888
 
 # Modelo de Gemini usado para el diagnóstico (visión + texto)
-GEMINI_MODEL = "gemini-3.7-flash"
+GEMINI_MODEL = "gemini-2.5-flash"
 # Si el modelo principal esta saturado (error 503) tras varios reintentos,
 # se prueba con este modelo de respaldo, mucho mas antiguo y estable.
-GEMINI_MODEL_FALLBACK = "gemini-3.6-flash"
+GEMINI_MODEL_FALLBACK = "gemini-2.5-flash"
 GEMINI_ENDPOINT = (
     "https://generativelanguage.googleapis.com/v1beta/models/"
     "{model}:generateContent?key={key}"
@@ -112,7 +112,7 @@ GEMINI_ENDPOINT = (
 # PRIVADO. Si en algun momento lo pones publico de nuevo, esta clave
 # quedaria expuesta otra vez y habria que revocarla y generar una nueva
 # (en https://aistudio.google.com/apikey) antes de hacerlo publico.
-DEFAULT_GEMINI_API_KEY = "AQ.Ab8RN6J4joFphAETQ-L1L78xpw0JaByyEU0J5u2MIlPhchPMng"
+DEFAULT_GEMINI_API_KEY = "AQ.Ab8RN6KLsDhL4l-AiEkhsiwliZCfy7hsa1vbmqgXda_-mI9jyw"
 
 # Mismo prompt que usaba el backend original, para mantener la misma
 # calidad y estructura de diagnóstico.
