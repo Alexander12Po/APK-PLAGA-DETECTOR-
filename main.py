@@ -99,7 +99,7 @@ CAMERA_REQUEST_CODE = 1888
 GEMINI_MODEL = "gemini-3.7-flash"
 # Si el modelo principal esta saturado (error 503) tras varios reintentos,
 # se prueba con este modelo de respaldo, mucho mas antiguo y estable.
-GEMINI_MODEL_FALLBACK = "gemini-2.5-flash"
+GEMINI_MODEL_FALLBACK = "gemini-3.6-flash"
 GEMINI_ENDPOINT = (
     "https://generativelanguage.googleapis.com/v1beta/models/"
     "{model}:generateContent?key={key}"
