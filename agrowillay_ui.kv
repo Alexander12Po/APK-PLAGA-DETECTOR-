@@ -276,7 +276,7 @@ RootLayout:
     padding: dp(12)
     canvas.before:
         Color:
-            rgba: 0.965, 0.975, 0.968, 1
+            rgba: 0.09, 0.075, 0.13, 1
         RoundedRectangle:
             pos: self.pos
             size: self.size
@@ -317,7 +317,7 @@ RootLayout:
         font_style: "Caption"
         halign: "center"
         theme_text_color: "Custom"
-        text_color: 0.063, 0.098, 0.082, 1
+        text_color: 0.85, 0.85, 0.88, 1
         text_size: self.width, None
         adaptive_height: True
 
@@ -503,7 +503,7 @@ RootLayout:
         MDTopAppBar:
             title: "Agrowillay"
             elevation: 0
-            md_bg_color: app.theme_color
+            md_bg_color: 0.043, 0.035, 0.07, 1
             specific_text_color: 1, 1, 1, 1
             left_action_items: [["leaf", lambda x: None]]
             right_action_items: [["dots-horizontal", lambda x: app.go_more()]]
@@ -517,6 +517,33 @@ RootLayout:
                 spacing: dp(20)
 
                 WelcomeStrip:
+
+                SectionCard:
+
+                    MDBoxLayout:
+                        adaptive_height: True
+                        spacing: dp(10)
+
+                        StepHeader:
+                            icon: "weather-lightning-rainy"
+                            title_text: "Alertas climaticas"
+                            subtitle_text: "Heladas, lluvias fuertes y riesgo de plagas en tu zona."
+
+                        RoundIconButton:
+                            icon: "refresh"
+                            pos_hint: {"center_y": 0.5}
+                            on_release: app.check_weather_alerts()
+
+                    MDBoxLayout:
+                        id: alerts_body
+                        orientation: "vertical"
+                        adaptive_height: True
+                        spacing: dp(8)
+
+                        MDLabel:
+                            text: "Toca el boton para revisar el pronostico de tu zona."
+                            theme_text_color: "Hint"
+                            adaptive_height: True
 
                 MDLabel:
                     text: "Acciones rapidas"
@@ -1145,7 +1172,7 @@ RootLayout:
         MDTopAppBar:
             title: "Mis diagnosticos"
             elevation: 0
-            md_bg_color: app.theme_color
+            md_bg_color: 0.043, 0.035, 0.07, 1
             specific_text_color: 1, 1, 1, 1
             left_action_items: [["arrow-left", lambda x: app.go_home()]]
 
@@ -1215,7 +1242,7 @@ RootLayout:
         MDTopAppBar:
             title: "Consejos"
             elevation: 0
-            md_bg_color: app.theme_color
+            md_bg_color: 0.043, 0.035, 0.07, 1
             specific_text_color: 1, 1, 1, 1
             left_action_items: [["arrow-left", lambda x: app.go_home()]]
 
@@ -1266,7 +1293,7 @@ RootLayout:
         MDTopAppBar:
             title: "Mas opciones"
             elevation: 0
-            md_bg_color: app.theme_color
+            md_bg_color: 0.043, 0.035, 0.07, 1
             specific_text_color: 1, 1, 1, 1
             left_action_items: [["arrow-left", lambda x: app.go_home()]]
 
@@ -1277,6 +1304,11 @@ RootLayout:
                 adaptive_height: True
                 padding: [dp(8), dp(16), dp(8), dp(30)]
                 spacing: dp(4)
+
+                MoreListItem:
+                    icon: "notebook-outline"
+                    text: "Mi bitacora agricola"
+                    on_release: app.open_bitacora_dialog()
 
                 MoreListItem:
                     icon: "translate"

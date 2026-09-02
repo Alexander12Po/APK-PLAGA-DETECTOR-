@@ -85,6 +85,7 @@ else:
 
 APP_DATA_DIR.mkdir(parents=True, exist_ok=True)
 CONFIG_FILE = APP_DATA_DIR / "config.json"
+BITACORA_FILE = APP_DATA_DIR / "bitacora.json"
 
 # Nombre de la foto tomada con la camara (debe coincidir con el <files-path>
 # declarado en src/android/file_paths.xml para que el FileProvider funcione).
@@ -183,6 +184,129 @@ class ConfigManager:
         CONFIG_FILE.write_text(
             json.dumps({"gemini_api_key": key.strip()}), encoding="utf-8"
         )
+
+
+class BitacoraManager:
+    """Guarda localmente los datos del predio del usuario (cultivo,
+    variedad, fecha de siembra, superficie) para personalizar las
+    alertas y recomendaciones."""
+
+    @staticmethod
+    def load() -> dict:
+        if BITACORA_FILE.exists():
+            try:
+                return json.loads(BITACORA_FILE.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+        return {}
+
+    @staticmethod
+    def save(cultivo="", variedad="", fecha_siembra="", superficie=""):
+        BITACORA_FILE.write_text(
+            json.dumps(
+                {
+                    "cultivo": cultivo.strip(),
+                    "variedad": variedad.strip(),
+                    "fecha_siembra": fecha_siembra.strip(),
+                    "superficie": superficie.strip(),
+                }
+            ),
+            encoding="utf-8",
+        )
+
+
+class WeatherClient:
+    """Pronostico gratuito de Open-Meteo (no requiere clave de API)."""
+
+    ENDPOINT = (
+        "https://api.open-meteo.com/v1/forecast"
+        "?latitude={lat}&longitude={lon}"
+        "&daily=temperature_2m_min,temperature_2m_max,precipitation_sum,"
+        "precipitation_probability_max,wind_speed_10m_max,"
+        "relative_humidity_2m_mean"
+        "&timezone=auto&forecast_days=3"
+    )
+
+    @staticmethod
+    def _valor(lista, i):
+        try:
+            return lista[i]
+        except (TypeError, IndexError):
+            return None
+
+    @classmethod
+    def get_forecast(cls, lat, lon):
+        url = cls.ENDPOINT.format(lat=lat, lon=lon)
+        resp = requests.get(url, timeout=20)
+        resp.raise_for_status()
+        daily = resp.json().get("daily", {})
+        fechas = daily.get("time", [])
+        dias = []
+        for i in range(len(fechas)):
+            dias.append(
+                {
+                    "fecha": fechas[i],
+                    "temp_min": cls._valor(daily.get("temperature_2m_min"), i),
+                    "temp_max": cls._valor(daily.get("temperature_2m_max"), i),
+                    "prob_lluvia": cls._valor(
+                        daily.get("precipitation_probability_max"), i
+                    ),
+                    "viento_max": cls._valor(daily.get("wind_speed_10m_max"), i),
+                    "humedad": cls._valor(
+                        daily.get("relative_humidity_2m_mean"), i
+                    ),
+                }
+            )
+        return dias
+
+
+def evaluar_riesgo_climatico(dias):
+    """Reglas simples de alerta temprana a partir del pronostico de 3 dias.
+
+    No reemplaza un modelo meteorologico real: son umbrales practicos
+    (helada, granizada/tormenta, condiciones para hongos o plagas) para
+    dar un aviso util con lo que ofrece una API gratuita."""
+    riesgos = []
+    for dia in dias:
+        temp_min = dia.get("temp_min")
+        prob_lluvia = dia.get("prob_lluvia") or 0
+        viento = dia.get("viento_max") or 0
+        humedad = dia.get("humedad") or 0
+
+        if temp_min is not None and temp_min <= 2:
+            riesgos.append(
+                {
+                    "fecha": dia["fecha"],
+                    "tipo": "Helada",
+                    "nivel": "alta" if temp_min <= 0 else "media",
+                    "detalle": f"Temperatura minima prevista: {temp_min} grados.",
+                }
+            )
+        if prob_lluvia >= 70 and viento >= 30:
+            riesgos.append(
+                {
+                    "fecha": dia["fecha"],
+                    "tipo": "Granizada o tormenta fuerte",
+                    "nivel": "media",
+                    "detalle": (
+                        f"{prob_lluvia}% de probabilidad de lluvia con viento "
+                        f"de hasta {viento} km/h."
+                    ),
+                }
+            )
+        if humedad >= 80 and temp_min is not None and temp_min >= 10:
+            riesgos.append(
+                {
+                    "fecha": dia["fecha"],
+                    "tipo": "Condiciones para hongos o plagas",
+                    "nivel": "media",
+                    "detalle": (
+                        f"Humedad alta ({humedad}%) con clima templado: "
+                        "vigila roya, rancha u otros hongos."
+                    ),
+                }
+            )
+    return riesgos
 
 
 # ---------------------------------------------------------------------------
@@ -932,6 +1056,163 @@ class AgrowillayApp(MDApp):
         card.disabled = True
         Animation.cancel_all(card, "opacity", "y")
         Animation(opacity=0, duration=0.2, t="out_quad").start(card)
+
+    # ------------------------------------------------------------------
+    # Alertas climaticas (Open-Meteo, gratis) + bitacora del predio
+    # ------------------------------------------------------------------
+
+    def check_weather_alerts(self):
+        home_screen = self.root.ids.sm.get_screen("home")
+        box = home_screen.ids.alerts_body
+        box.clear_widgets()
+        box.add_widget(
+            MDLabel(
+                text="Buscando tu ubicacion...",
+                theme_text_color="Hint",
+                adaptive_height=True,
+            )
+        )
+        try:
+            from plyer import gps
+
+            gps.configure(on_location=self._on_weather_gps, on_status=lambda *a: None)
+            gps.start(minTime=1000, minDistance=1)
+            Clock.schedule_once(self._weather_gps_timeout, 6)
+        except Exception:
+            _write_crash_log(
+                "Error iniciando GPS para clima (no crashea la app):\n"
+                + traceback.format_exc()
+            )
+            self._show_weather_error("No se pudo acceder al GPS del celular.")
+
+    def _weather_gps_timeout(self, dt):
+        home_screen = self.root.ids.sm.get_screen("home")
+        if len(home_screen.ids.alerts_body.children) == 1:
+            self._show_weather_error("No se pudo obtener tu ubicacion.")
+
+    @mainthread
+    def _on_weather_gps(self, **kwargs):
+        lat, lon = kwargs.get("lat"), kwargs.get("lon")
+        try:
+            from plyer import gps
+
+            gps.stop()
+        except Exception:
+            pass
+        if not (lat and lon):
+            self._show_weather_error("No se pudo obtener tu ubicacion.")
+            return
+        threading.Thread(
+            target=self._fetch_weather_thread, args=(lat, lon), daemon=True
+        ).start()
+
+    def _fetch_weather_thread(self, lat, lon):
+        try:
+            dias = WeatherClient.get_forecast(lat, lon)
+            riesgos = evaluar_riesgo_climatico(dias)
+        except Exception:
+            _write_crash_log(
+                "Error consultando el clima (no crashea la app):\n"
+                + traceback.format_exc()
+            )
+            Clock.schedule_once(
+                lambda dt: self._show_weather_error(
+                    "No se pudo consultar el clima. Revisa tu conexion."
+                )
+            )
+            return
+        Clock.schedule_once(lambda dt: self._render_weather_alerts(riesgos))
+
+    @mainthread
+    def _render_weather_alerts(self, riesgos):
+        home_screen = self.root.ids.sm.get_screen("home")
+        box = home_screen.ids.alerts_body
+        box.clear_widgets()
+
+        if not riesgos:
+            box.add_widget(
+                Factory.IconRow(
+                    icon="check-circle-outline",
+                    icon_color=self.theme_color,
+                    text="Sin riesgos climaticos relevantes en los proximos 3 dias.",
+                )
+            )
+            return
+
+        for riesgo in riesgos:
+            color_key = "red_600" if riesgo["nivel"] == "alta" else "amber_600"
+            box.add_widget(
+                Factory.IconRow(
+                    icon="alert-outline",
+                    icon_color=hex_to_rgba(COLORS[color_key]),
+                    text=(
+                        f"[b]{riesgo['tipo']}[/b] ({riesgo['fecha']}): "
+                        f"{riesgo['detalle']}"
+                    ),
+                )
+            )
+
+    @mainthread
+    def _show_weather_error(self, mensaje="No se pudo consultar el clima."):
+        home_screen = self.root.ids.sm.get_screen("home")
+        box = home_screen.ids.alerts_body
+        box.clear_widgets()
+        box.add_widget(
+            MDLabel(text=mensaje, theme_text_color="Hint", adaptive_height=True)
+        )
+
+    def open_bitacora_dialog(self):
+        from kivymd.uix.textfield import MDTextField
+        from kivymd.uix.dialog import MDDialog
+        from kivymd.uix.button import MDFlatButton
+
+        datos = BitacoraManager.load()
+
+        content = MDBoxLayout(
+            orientation="vertical",
+            spacing=dp(10),
+            adaptive_height=True,
+            padding=(0, dp(10)),
+        )
+        campo_cultivo = MDTextField(
+            text=datos.get("cultivo", ""), hint_text="Cultivo (ej. maiz, papa)"
+        )
+        campo_variedad = MDTextField(
+            text=datos.get("variedad", ""), hint_text="Variedad"
+        )
+        campo_fecha = MDTextField(
+            text=datos.get("fecha_siembra", ""),
+            hint_text="Fecha de siembra (dd/mm/aaaa)",
+        )
+        campo_superficie = MDTextField(
+            text=datos.get("superficie", ""),
+            hint_text="Superficie (ej. 0.5 hectareas)",
+        )
+        for campo in (campo_cultivo, campo_variedad, campo_fecha, campo_superficie):
+            content.add_widget(campo)
+
+        def _guardar(*_a):
+            BitacoraManager.save(
+                cultivo=campo_cultivo.text,
+                variedad=campo_variedad.text,
+                fecha_siembra=campo_fecha.text,
+                superficie=campo_superficie.text,
+            )
+            toast("Bitacora guardada")
+            dialog.dismiss()
+
+        dialog = MDDialog(
+            title="Mi bitacora agricola",
+            type="custom",
+            content_cls=content,
+            buttons=[
+                MDFlatButton(text="CANCELAR", on_release=lambda x: dialog.dismiss()),
+                MDFlatButton(
+                    text="GUARDAR", text_color=self.theme_color, on_release=_guardar
+                ),
+            ],
+        )
+        dialog.open()
 
     # ------------------------------------------------------------------
     # Paso 3: ayuda cercana (GPS + enlaces directos a Google Maps,
