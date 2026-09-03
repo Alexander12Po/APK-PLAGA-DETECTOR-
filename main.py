@@ -24,6 +24,7 @@ para otras apps).
 import base64
 import json
 import os
+import shutil
 import threading
 import time
 import traceback
@@ -86,6 +87,8 @@ else:
 APP_DATA_DIR.mkdir(parents=True, exist_ok=True)
 CONFIG_FILE = APP_DATA_DIR / "config.json"
 BITACORA_FILE = APP_DATA_DIR / "bitacora.json"
+HISTORY_FILE = APP_DATA_DIR / "historial.json"
+HISTORY_PHOTOS_DIR = APP_DATA_DIR / "historial_fotos"
 
 # Nombre de la foto tomada con la camara (debe coincidir con el <files-path>
 # declarado en src/android/file_paths.xml para que el FileProvider funcione).
@@ -213,6 +216,52 @@ class BitacoraManager:
             ),
             encoding="utf-8",
         )
+
+
+class HistoryManager:
+    """Guarda cada diagnostico (con una copia de su foto) en un archivo
+    local, para que el historial sobreviva a cerrar la app. Antes solo
+    se guardaba el ultimo resultado en memoria y se perdia al cerrar."""
+
+    MAX_ENTRADAS = 30
+
+    @staticmethod
+    def load() -> list:
+        if HISTORY_FILE.exists():
+            try:
+                return json.loads(HISTORY_FILE.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+        return []
+
+    @classmethod
+    def add(cls, diagnosis, foto_origen) -> None:
+        try:
+            HISTORY_PHOTOS_DIR.mkdir(parents=True, exist_ok=True)
+            entradas = cls.load()
+
+            foto_guardada = ""
+            if foto_origen and os.path.exists(foto_origen):
+                nombre = f"{int(time.time() * 1000)}.jpg"
+                destino = HISTORY_PHOTOS_DIR / nombre
+                shutil.copy(foto_origen, destino)
+                foto_guardada = str(destino)
+
+            entradas.insert(
+                0,
+                {
+                    "fecha": time.strftime("%d/%m/%Y %H:%M"),
+                    "foto": foto_guardada,
+                    "diagnosis": diagnosis,
+                },
+            )
+            entradas = entradas[: cls.MAX_ENTRADAS]
+            HISTORY_FILE.write_text(json.dumps(entradas), encoding="utf-8")
+        except Exception:
+            _write_crash_log(
+                "Error guardando en el historial (no crashea la app):\n"
+                + traceback.format_exc()
+            )
 
 
 class WeatherClient:
@@ -524,9 +573,9 @@ class AgrowillayApp(MDApp):
             toast("Primero analiza una planta para ver ayuda cercana")
 
     def _refresh_history(self):
-        """Muestra el ultimo diagnostico de la sesion en la pestana
-        'Diagnosticos'. No hay base de datos todavia, asi que por ahora
-        solo se conserva el ultimo resultado en memoria."""
+        """Llena la pestana 'Diagnosticos' con una tarjeta compacta por
+        cada diagnostico guardado (mas reciente primero). Al tocar una
+        tarjeta se abre el detalle completo en un dialogo."""
         try:
             history_screen = self.root.ids.sm.get_screen("history")
         except Exception:
@@ -534,21 +583,90 @@ class AgrowillayApp(MDApp):
 
         try:
             placeholder = history_screen.ids.history_placeholder
-            last_card = history_screen.ids.history_last_card
             body = history_screen.ids.history_body
-            if self.last_diagnosis:
-                body.clear_widgets()
-                self._render_diagnosis(body, self.last_diagnosis)
-                self._hide_card(placeholder)
-                self._show_card(last_card)
-            else:
+            entradas = HistoryManager.load()
+
+            body.clear_widgets()
+
+            if not entradas:
                 self._show_card(placeholder)
-                self._hide_card(last_card)
+                self._hide_card(body)
+                return
+
+            self._hide_card(placeholder)
+            self._show_card(body)
+
+            for entrada in entradas:
+                diagnosis = entrada.get("diagnosis") or {}
+                planta = self._txt(diagnosis.get("planta_identificada"))
+                severidad = self._txt(diagnosis.get("severidad"), "").upper()
+                resumen = f"{planta}" + (f" - {severidad}" if severidad else "")
+
+                card = self._make_widget(
+                    "HistoryEntryCard",
+                    foto=entrada.get("foto", ""),
+                    fecha=entrada.get("fecha", ""),
+                    resumen=resumen,
+                )
+                card.bind(
+                    on_release=lambda *_a, e=entrada: self.show_history_detail(e)
+                )
+                body.add_widget(card)
         except Exception:  # noqa: BLE001
             _write_crash_log(
                 "Error refrescando historial (no crashea la app):\n"
                 + traceback.format_exc()
             )
+
+    def show_history_detail(self, entrada):
+        from kivymd.uix.dialog import MDDialog
+        from kivymd.uix.button import MDFlatButton
+        from kivy.uix.scrollview import ScrollView
+
+        try:
+            contenedor = MDBoxLayout(
+                orientation="vertical",
+                spacing=dp(12),
+                adaptive_height=True,
+                padding=(0, dp(10)),
+            )
+
+            foto = entrada.get("foto", "")
+            if foto and os.path.exists(foto):
+                from kivy.uix.image import Image as KivyImage
+
+                contenedor.add_widget(
+                    KivyImage(
+                        source=foto,
+                        size_hint_y=None,
+                        height=dp(180),
+                        allow_stretch=True,
+                        keep_ratio=True,
+                    )
+                )
+
+            self._render_diagnosis(contenedor, entrada.get("diagnosis") or {})
+
+            scroll = ScrollView(size_hint_y=None, height=dp(420))
+            scroll.add_widget(contenedor)
+
+            dialog = MDDialog(
+                title=entrada.get("fecha", "Diagnostico"),
+                type="custom",
+                content_cls=scroll,
+                buttons=[
+                    MDFlatButton(
+                        text="CERRAR", on_release=lambda x: dialog.dismiss()
+                    ),
+                ],
+            )
+            dialog.open()
+        except Exception:
+            _write_crash_log(
+                "Error mostrando detalle del historial (no crashea la app):\n"
+                + traceback.format_exc()
+            )
+            toast("No se pudo mostrar ese diagnostico.")
 
     @staticmethod
     def _simple_dialog(title, text):
@@ -893,6 +1011,7 @@ class AgrowillayApp(MDApp):
             return
 
         self.last_diagnosis = diagnosis
+        HistoryManager.add(diagnosis, self.current_image_path)
         self._refresh_history()
 
         try:
@@ -1088,7 +1207,7 @@ class AgrowillayApp(MDApp):
         box.clear_widgets()
         box.add_widget(
             MDLabel(
-                text="Buscando tu ubicacion...",
+                text="Buscando tu ubicacion (puede tardar unos segundos)...",
                 theme_text_color="Hint",
                 adaptive_height=True,
             )
@@ -1098,18 +1217,24 @@ class AgrowillayApp(MDApp):
 
             gps.configure(on_location=self._on_weather_gps, on_status=lambda *a: None)
             gps.start(minTime=1000, minDistance=1)
-            Clock.schedule_once(self._weather_gps_timeout, 6)
+            Clock.schedule_once(self._weather_gps_timeout, 20)
         except Exception:
             _write_crash_log(
                 "Error iniciando GPS para clima (no crashea la app):\n"
                 + traceback.format_exc()
             )
-            self._show_weather_error("No se pudo acceder al GPS del celular.")
+            self._show_weather_error(
+                "No se pudo acceder al GPS. Revisa que la ubicacion "
+                "este activada en tu celular y que le diste permiso a la app."
+            )
 
     def _weather_gps_timeout(self, dt):
         home_screen = self.root.ids.sm.get_screen("home")
         if len(home_screen.ids.alerts_body.children) == 1:
-            self._show_weather_error("No se pudo obtener tu ubicacion.")
+            self._show_weather_error(
+                "No se pudo obtener tu ubicacion. Activa el GPS en tu "
+                "celular (mejor al aire libre) y vuelve a intentar."
+            )
 
     @mainthread
     def _on_weather_gps(self, **kwargs):
@@ -1121,7 +1246,9 @@ class AgrowillayApp(MDApp):
         except Exception:
             pass
         if not (lat and lon):
-            self._show_weather_error("No se pudo obtener tu ubicacion.")
+            self._show_weather_error(
+                "No se pudo obtener tu ubicacion. Activa el GPS e intenta de nuevo."
+            )
             return
         threading.Thread(
             target=self._fetch_weather_thread, args=(lat, lon), daemon=True
@@ -1253,7 +1380,7 @@ class AgrowillayApp(MDApp):
             gps.configure(on_location=self._on_gps_location, on_status=lambda *a: None)
             gps.start(minTime=1000, minDistance=1)
             # Si en 6 segundos no llega ubicacion, usamos busqueda manual.
-            Clock.schedule_once(self._gps_timeout_check, 6)
+            Clock.schedule_once(self._gps_timeout_check, 20)
         except Exception:
             _write_crash_log(
                 "Error en locate_nearby (no crashea la app):\n"
