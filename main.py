@@ -1212,15 +1212,21 @@ class AgrowillayApp(MDApp):
                 adaptive_height=True,
             )
         )
+        _write_crash_log("GPS-CLIMA: check_weather_alerts() llamado.")
         try:
             from plyer import gps
 
-            gps.configure(on_location=self._on_weather_gps, on_status=lambda *a: None)
+            _write_crash_log("GPS-CLIMA: import plyer.gps OK, llamando configure()...")
+            gps.configure(
+                on_location=self._on_weather_gps, on_status=self._on_gps_status
+            )
+            _write_crash_log("GPS-CLIMA: configure() OK, llamando start()...")
             gps.start(minTime=1000, minDistance=1)
+            _write_crash_log("GPS-CLIMA: start() no lanzo excepcion. Esperando...")
             Clock.schedule_once(self._weather_gps_timeout, 20)
         except Exception:
             _write_crash_log(
-                "Error iniciando GPS para clima (no crashea la app):\n"
+                "GPS-CLIMA: excepcion en configure()/start():\n"
                 + traceback.format_exc()
             )
             self._show_weather_error(
@@ -1228,7 +1234,15 @@ class AgrowillayApp(MDApp):
                 "este activada en tu celular y que le diste permiso a la app."
             )
 
+    def _on_gps_status(self, stype, status):
+        """Esto lo llama Android directamente (aunque el usuario ya dio el
+        permiso) para avisar del ESTADO del proveedor de ubicacion. Antes
+        se ignoraba por completo; ahora se guarda para saber la causa
+        real si el GPS nunca responde."""
+        _write_crash_log(f"GPS-CLIMA: on_status -> tipo={stype!r} status={status!r}")
+
     def _weather_gps_timeout(self, dt):
+        _write_crash_log("GPS-CLIMA: se cumplieron los 20s de espera (timeout).")
         home_screen = self.root.ids.sm.get_screen("home")
         if len(home_screen.ids.alerts_body.children) == 1:
             self._show_weather_error(
@@ -1238,6 +1252,7 @@ class AgrowillayApp(MDApp):
 
     @mainthread
     def _on_weather_gps(self, **kwargs):
+        _write_crash_log(f"GPS-CLIMA: on_location -> kwargs={kwargs!r}")
         lat, lon = kwargs.get("lat"), kwargs.get("lon")
         try:
             from plyer import gps
