@@ -19,7 +19,7 @@ version = 1.0.0
 # NOTA: no incluimos "google-generativeai" porque main.py llama a la API de
 # Gemini directamente por REST (con "requests"), lo cual es mucho mas liviano
 # y evita dependencias problematicas de compilar para Android (grpc, protobuf).
-requirements = python3,kivy==2.3.0,kivymd==1.2.0,requests,pillow,plyer,certifi,urllib3,charset-normalizer,idna
+requirements = python3,kivy==2.3.0,kivymd==1.2.0,requests,pillow,plyer,certifi,urllib3,charset-normalizer,idna,pyjnius
 
 # ---------------------------------------------------------------------------
 # Recursos visuales: icono y splash screen
@@ -55,8 +55,11 @@ android.accept_sdk_license = True
 # NO fijamos p4a.branch: dejamos que Buildozer use la rama "master" de
 # python-for-android, que es la version estable por defecto.
 
-# Arquitecturas: arm64-v8a cubre casi todos los celulares modernos.
-android.archs = arm64-v8a
+# Arquitecturas: arm64-v8a cubre los celulares modernos (64-bit).
+# armeabi-v7a es NECESARIO para gama media/baja y muchos Android 12 que
+# todavia traen CPU de 32-bit; sin ella, Android rechaza la instalacion
+# con "la aplicacion no es compatible con este dispositivo".
+android.archs = arm64-v8a,armeabi-v7a
 
 android.allow_backup = True
 

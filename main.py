@@ -1240,6 +1240,42 @@ class AgrowillayApp(MDApp):
         se ignoraba por completo; ahora se guarda para saber la causa
         real si el GPS nunca responde."""
         _write_crash_log(f"GPS-CLIMA: on_status -> tipo={stype!r} status={status!r}")
+        if status == "provider-disabled":
+            self._gps_disabled_count = getattr(self, "_gps_disabled_count", 0) + 1
+            # Si TODOS los proveedores avisan disabled, la ubicacion del
+            # sistema (no el permiso de la app) esta apagada. No tiene
+            # sentido esperar los 20s: avisamos ya y ofrecemos abrir Ajustes.
+            if self._gps_disabled_count >= 4:
+                try:
+                    from plyer import gps
+
+                    gps.stop()
+                except Exception:
+                    pass
+                self._gps_disabled_count = 0
+                self._show_weather_error(
+                    "La ubicacion de tu celular esta APAGADA (no es un tema "
+                    "de permisos). Toca aqui para abrir Ajustes y activarla.",
+                    on_press=self._open_location_settings,
+                )
+
+    def _open_location_settings(self, *args):
+        """Abre directamente la pantalla de Ajustes > Ubicacion del sistema."""
+        if platform != "android":
+            return
+        try:
+            from jnius import autoclass
+
+            Intent = autoclass("android.content.Intent")
+            Settings = autoclass("android.provider.Settings")
+            PythonActivity = autoclass("org.kivy.android.PythonActivity")
+            intent = Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
+            PythonActivity.mActivity.startActivity(intent)
+        except Exception:
+            _write_crash_log(
+                "GPS-CLIMA: no se pudo abrir Ajustes de ubicacion:\n"
+                + traceback.format_exc()
+            )
 
     def _weather_gps_timeout(self, dt):
         _write_crash_log("GPS-CLIMA: se cumplieron los 20s de espera (timeout).")
@@ -1318,13 +1354,21 @@ class AgrowillayApp(MDApp):
             )
 
     @mainthread
-    def _show_weather_error(self, mensaje="No se pudo consultar el clima."):
+    def _show_weather_error(self, mensaje="No se pudo consultar el clima.", on_press=None):
         home_screen = self.root.ids.sm.get_screen("home")
         box = home_screen.ids.alerts_body
         box.clear_widgets()
         box.add_widget(
             MDLabel(text=mensaje, theme_text_color="Hint", adaptive_height=True)
         )
+        if on_press is not None:
+            box.add_widget(
+                MDRaisedButton(
+                    text="Activar ubicacion",
+                    on_release=on_press,
+                    pos_hint={"center_x": 0.5},
+                )
+            )
 
     def open_bitacora_dialog(self):
         from kivymd.uix.textfield import MDTextField
@@ -1392,9 +1436,13 @@ class AgrowillayApp(MDApp):
 
             from plyer import gps
 
-            gps.configure(on_location=self._on_gps_location, on_status=lambda *a: None)
+            self._locate_disabled_count = 0
+            gps.configure(
+                on_location=self._on_gps_location, on_status=self._on_locate_status
+            )
             gps.start(minTime=1000, minDistance=1)
-            # Si en 6 segundos no llega ubicacion, usamos busqueda manual.
+            # Si en 20 segundos no llega ubicacion (o el sistema avisa que
+            # esta apagada), usamos busqueda manual.
             Clock.schedule_once(self._gps_timeout_check, 20)
         except Exception:
             _write_crash_log(
@@ -1405,6 +1453,20 @@ class AgrowillayApp(MDApp):
                 self._render_manual_search()
             except Exception:
                 pass
+
+    def _on_locate_status(self, stype, status):
+        if status == "provider-disabled":
+            self._locate_disabled_count = getattr(self, "_locate_disabled_count", 0) + 1
+            if self._locate_disabled_count >= 4:
+                try:
+                    from plyer import gps
+
+                    gps.stop()
+                except Exception:
+                    pass
+                main_screen = self.root.ids.sm.get_screen("main")
+                if not main_screen.ids.locator_body.children:
+                    self._render_manual_search()
 
     def _gps_timeout_check(self, dt):
         main_screen = self.root.ids.sm.get_screen("main")
