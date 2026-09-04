@@ -1234,18 +1234,30 @@ class AgrowillayApp(MDApp):
                 "este activada en tu celular y que le diste permiso a la app."
             )
 
+    @mainthread
     def _on_gps_status(self, stype, status):
         """Esto lo llama Android directamente (aunque el usuario ya dio el
         permiso) para avisar del ESTADO del proveedor de ubicacion. Antes
         se ignoraba por completo; ahora se guarda para saber la causa
-        real si el GPS nunca responde."""
+        real si el GPS nunca responde.
+
+        IMPORTANTE: este callback llega desde el hilo de Android, no desde
+        el hilo de Kivy. @mainthread lo reencola en el hilo correcto; sin
+        esto, tocar widgets aca puede fallar en silencio."""
         _write_crash_log(f"GPS-CLIMA: on_status -> tipo={stype!r} status={status!r}")
         if status == "provider-disabled":
             self._gps_disabled_count = getattr(self, "_gps_disabled_count", 0) + 1
+            _write_crash_log(
+                f"GPS-CLIMA: contador provider-disabled = {self._gps_disabled_count}"
+            )
             # Si TODOS los proveedores avisan disabled, la ubicacion del
             # sistema (no el permiso de la app) esta apagada. No tiene
             # sentido esperar los 20s: avisamos ya y ofrecemos abrir Ajustes.
             if self._gps_disabled_count >= 4:
+                _write_crash_log(
+                    "GPS-CLIMA: 4 providers disabled detectados, "
+                    "mostrando aviso inmediato (sin esperar timeout)."
+                )
                 try:
                     from plyer import gps
 
@@ -1253,11 +1265,19 @@ class AgrowillayApp(MDApp):
                 except Exception:
                     pass
                 self._gps_disabled_count = 0
-                self._show_weather_error(
-                    "La ubicacion de tu celular esta APAGADA (no es un tema "
-                    "de permisos). Toca aqui para abrir Ajustes y activarla.",
-                    on_press=self._open_location_settings,
-                )
+                try:
+                    self._show_weather_error(
+                        "La ubicacion de tu celular esta APAGADA (no es un "
+                        "tema de permisos). Toca aqui para abrir Ajustes y "
+                        "activarla.",
+                        on_press=self._open_location_settings,
+                    )
+                    _write_crash_log("GPS-CLIMA: _show_weather_error OK.")
+                except Exception:
+                    _write_crash_log(
+                        "GPS-CLIMA: excepcion mostrando el aviso:\n"
+                        + traceback.format_exc()
+                    )
 
     def _open_location_settings(self, *args):
         """Abre directamente la pantalla de Ajustes > Ubicacion del sistema."""
@@ -1454,10 +1474,14 @@ class AgrowillayApp(MDApp):
             except Exception:
                 pass
 
+    @mainthread
     def _on_locate_status(self, stype, status):
         if status == "provider-disabled":
             self._locate_disabled_count = getattr(self, "_locate_disabled_count", 0) + 1
             if self._locate_disabled_count >= 4:
+                _write_crash_log(
+                    "GPS-LOCATE: 4 providers disabled, pasando a busqueda manual."
+                )
                 try:
                     from plyer import gps
 
