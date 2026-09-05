@@ -453,13 +453,20 @@ RootLayout:
     spacing: dp(2)
     padding: dp(4)
 
-    MDIcon:
-        icon: root.icon
-        halign: "center"
-        text_size: self.width, None
-        theme_text_color: "Custom"
-        text_color: app.theme_color if root.active else (0.6, 0.63, 0.61, 1)
-        font_size: "22sp"
+    FloatLayout:
+        size_hint_y: None
+        height: dp(26)
+
+        MDIcon:
+            icon: root.icon
+            size_hint: None, None
+            size: dp(26), dp(26)
+            pos_hint: {"center_x": 0.5, "center_y": 0.5}
+            halign: "center"
+            valign: "middle"
+            theme_text_color: "Custom"
+            text_color: app.theme_color if root.active else (0.6, 0.63, 0.61, 1)
+            font_size: "22sp"
 
     MDLabel:
         text: root.text
@@ -844,7 +851,7 @@ RootLayout:
     bg_color: 0.14, 0.12, 0.19, 1
     border_color: 0, 0, 0, 0
     size_hint: None, None
-    size: dp(42), dp(42)
+    size: dp(54), dp(54)
     canvas.before:
         Color:
             rgba: self.bg_color
@@ -854,7 +861,7 @@ RootLayout:
         Color:
             rgba: self.border_color
         Line:
-            width: 1.2
+            width: 1.4
             circle: (self.center_x, self.center_y, self.width / 2 - 1)
 
     MDIcon:
@@ -863,7 +870,7 @@ RootLayout:
         valign: "middle"
         theme_text_color: "Custom"
         text_color: 1, 1, 1, 1
-        font_size: "20sp"
+        font_size: "26sp"
         pos_hint: {"center_x": 0.5, "center_y": 0.5}
 
 <MainScreen>:
@@ -1180,10 +1187,17 @@ RootLayout:
 
                         RoundIconButton:
                             id: speak_btn
-                            icon: "volume-high"
+                            icon: "stop-circle-outline" if app.is_speaking else "volume-high"
                             disabled: True
                             pos_hint: {"center_y": 0.5}
                             on_release: app.speak_diagnosis(app.last_diagnosis)
+
+                        RoundIconButton:
+                            id: speak_qu_btn
+                            icon: "stop-circle-outline" if app.is_speaking else "translate"
+                            disabled: True
+                            pos_hint: {"center_y": 0.5}
+                            on_release: app.speak_diagnosis_quechua(app.last_diagnosis)
 
                     MDBoxLayout:
                         id: result_body

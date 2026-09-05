@@ -130,9 +130,20 @@ sin texto adicional, sin explicaciones, sin markdown. Usa exactamente esta forma
   "confianza": "breve frase sobre qué tan clara es la evidencia visual en la foto",
   "sintomas_observados": ["síntoma 1", "síntoma 2"],
   "pasos": ["paso 1 de tratamiento", "paso 2", "paso 3", "paso 4 opcional"],
+  "productos_recomendados": ["producto comercial 1 (ej. fungicida a base de cobre)", "producto comercial 2"],
+  "remedios_caseros": ["remedio casero 1 (ej. jabon potasico diluido)", "remedio casero 2"],
   "prevencion": "una recomendación breve para evitar que vuelva a ocurrir",
   "urgencia": "si requiere atención inmediata o puede esperar, en una frase"
 }
+
+Para "productos_recomendados": sugiere 1 a 3 productos AGRICOLAS reales y de
+venta comun (fungicidas, insecticidas, abonos), con su ingrediente activo o
+tipo, sin inventar una marca especifica.
+Para "remedios_caseros": sugiere 1 a 3 alternativas caseras/organicas reales
+y de bajo costo (ej. jabon potasico, extracto de ajo o aji, ceniza, aceite
+de neem casero) que el agricultor pueda preparar con lo que tiene a mano.
+Si el problema es leve o no requiere ningun producto, deja esas dos listas
+vacias en vez de inventar algo innecesario.
 
 Si la imagen no muestra una planta o no se aprecia ninguna plaga o enfermedad,
 usa "plaga_o_problema": "No se detectó plaga visible" y ajusta pasos y
@@ -363,6 +374,78 @@ def evaluar_riesgo_climatico(dias):
 # ---------------------------------------------------------------------------
 
 
+class SpeechManager:
+    """Texto a voz propio via pyjnius, en vez de plyer.tts.
+
+    plyer.tts en Android SIEMPRE fija el idioma a Locale.US por dentro
+    (confirmado en su codigo fuente) y crea una instancia nueva de
+    TextToSpeech cada vez que se llama, sin guardar ninguna referencia
+    -> por eso no habia forma de elegir idioma ni de detener la voz una
+    vez iniciada. Aca se guarda UNA sola instancia reutilizable para
+    poder hacer ambas cosas, siguiendo el mismo patron de reintentos que
+    ya usa plyer internamente (la primera llamada casi nunca funciona a
+    la primera por un tema de tiempos de inicializacion de Android)."""
+
+    _tts = None
+
+    @classmethod
+    def _get_engine(cls):
+        if cls._tts is None:
+            from jnius import autoclass
+
+            TextToSpeech = autoclass("android.speech.tts.TextToSpeech")
+            PythonActivity = autoclass("org.kivy.android.PythonActivity")
+            cls._tts = TextToSpeech(PythonActivity.mActivity, None)
+        return cls._tts
+
+    @classmethod
+    def speak(cls, texto, locale_code="es"):
+        """Bloqueante: SIEMPRE llamar desde un hilo aparte, nunca desde
+        el hilo principal. Devuelve True/False segun si se pudo hablar."""
+        try:
+            from jnius import autoclass
+
+            Locale = autoclass("java.util.Locale")
+            TextToSpeech = autoclass("android.speech.tts.TextToSpeech")
+
+            tts = cls._get_engine()
+            resultado_idioma = tts.setLanguage(Locale(locale_code))
+            if resultado_idioma in (-1, -2):
+                # -1 = LANG_MISSING_DATA, -2 = LANG_NOT_SUPPORTED. La
+                # mayoria de celulares NO traen una voz en quechua
+                # instalada; se avisa aca pero se intenta leer igual
+                # (puede sonar con acento incorrecto, o el sistema puede
+                # simplemente no decir nada, segun el fabricante).
+                _write_crash_log(
+                    f"SpeechManager: idioma '{locale_code}' sin soporte "
+                    f"completo en este celular (codigo={resultado_idioma})."
+                )
+
+            intentos = 0
+            resultado = tts.speak(texto, TextToSpeech.QUEUE_FLUSH, None, None)
+            while resultado == -1 and intentos < 100:
+                time.sleep(0.1)
+                intentos += 1
+                resultado = tts.speak(
+                    texto, TextToSpeech.QUEUE_FLUSH, None, None
+                )
+            return resultado != -1
+        except Exception:
+            _write_crash_log(
+                "SpeechManager.speak() fallo (no crashea la app):\n"
+                + traceback.format_exc()
+            )
+            return False
+
+    @classmethod
+    def stop(cls):
+        if cls._tts is not None:
+            try:
+                cls._tts.stop()
+            except Exception:
+                pass
+
+
 class GeminiClient:
     """Envía la imagen + el prompt a la API de Gemini y devuelve un dict
     con el diagnóstico. Se ejecuta siempre en un hilo aparte para no
@@ -380,6 +463,37 @@ class GeminiClient:
                 "La respuesta de la IA no trajo un JSON válido."
             )
         return json.loads(cleaned[start : end + 1])
+
+    @classmethod
+    def translate_text(cls, texto: str, idioma_destino: str, api_key: str) -> str:
+        """Traduce un texto corto con Gemini (usado para leer el
+        diagnostico en quechua). Sin reintentos con modelo de respaldo:
+        es una funcion secundaria, si falla simplemente no se muestra
+        la traduccion."""
+        url = GEMINI_ENDPOINT.format(model=GEMINI_MODEL, key=api_key)
+        payload = {
+            "contents": [
+                {
+                    "parts": [
+                        {
+                            "text": (
+                                f"Traduce el siguiente texto al {idioma_destino} "
+                                "de forma clara y natural, sin explicaciones "
+                                "adicionales, solo la traduccion:\n\n" + texto
+                            )
+                        }
+                    ]
+                }
+            ],
+            "generationConfig": {
+                "max_output_tokens": 1024,
+                "thinkingConfig": {"thinkingLevel": "low"},
+            },
+        }
+        resp = requests.post(url, json=payload, timeout=30)
+        resp.raise_for_status()
+        data = resp.json()
+        return data["candidates"][0]["content"]["parts"][0]["text"].strip()
 
     @classmethod
     def analyze_image(cls, image_path: str, api_key: str) -> dict:
@@ -515,6 +629,7 @@ class MoreScreen(Screen):
 class AgrowillayApp(MDApp):
     theme_color = hex_to_rgba(COLORS["green_600"])
     current_image_path = StringProperty("")
+    is_speaking = BooleanProperty(False)
     last_diagnosis = ObjectProperty(None, allownone=True)
     current_tab = StringProperty("home")
 
@@ -567,10 +682,8 @@ class AgrowillayApp(MDApp):
         self.choose_from_gallery()
 
     def home_show_help(self):
-        if self.last_diagnosis:
-            self.go_diagnosis()
-        else:
-            toast("Primero analiza una planta para ver ayuda cercana")
+        self.go_diagnosis()
+        self.locate_nearby()
 
     def _refresh_history(self):
         """Llena la pestana 'Diagnosticos' con una tarjeta compacta por
@@ -892,6 +1005,7 @@ class AgrowillayApp(MDApp):
             self._hide_card(main_screen.ids.result_card)
             self._hide_card(main_screen.ids.locator_card)
             main_screen.ids.speak_btn.disabled = True
+            main_screen.ids.speak_qu_btn.disabled = True
             self.last_diagnosis = None
         except Exception as exc:  # noqa: BLE001
             toast(f"No se pudo mostrar la imagen: {exc}")
@@ -912,6 +1026,7 @@ class AgrowillayApp(MDApp):
         self._hide_card(main_screen.ids.result_card)
         self._hide_card(main_screen.ids.locator_card)
         main_screen.ids.speak_btn.disabled = True
+        main_screen.ids.speak_qu_btn.disabled = True
         self.last_diagnosis = None
 
     # ------------------------------------------------------------------
@@ -1017,6 +1132,7 @@ class AgrowillayApp(MDApp):
         try:
             speak_btn = main_screen.ids.speak_btn
             speak_btn.disabled = False
+            main_screen.ids.speak_qu_btn.disabled = False
             Animation.cancel_all(speak_btn, "size")
             base_size = speak_btn.size[:]
             speak_btn.size = (base_size[0] * 0.6, base_size[1] * 0.6)
@@ -1141,6 +1257,52 @@ class AgrowillayApp(MDApp):
                         icon="check-circle-outline",
                         icon_color=self.theme_color,
                         text=paso,
+                    )
+                )
+
+        productos = diagnosis.get("productos_recomendados") or []
+        if not isinstance(productos, list):
+            productos = [productos]
+        productos = [self._txt(p, "") for p in productos]
+        productos = [p for p in productos if p]
+        if productos:
+            body.add_widget(
+                MDLabel(
+                    text="[b]Productos recomendados[/b]",
+                    markup=True,
+                    adaptive_height=True,
+                )
+            )
+            for producto in productos:
+                body.add_widget(
+                    self._make_widget(
+                        "IconRow",
+                        icon="bottle-tonic-outline",
+                        icon_color=hex_to_rgba(COLORS["amber_600"]),
+                        text=producto,
+                    )
+                )
+
+        remedios = diagnosis.get("remedios_caseros") or []
+        if not isinstance(remedios, list):
+            remedios = [remedios]
+        remedios = [self._txt(r, "") for r in remedios]
+        remedios = [r for r in remedios if r]
+        if remedios:
+            body.add_widget(
+                MDLabel(
+                    text="[b]Remedios caseros[/b]",
+                    markup=True,
+                    adaptive_height=True,
+                )
+            )
+            for remedio in remedios:
+                body.add_widget(
+                    self._make_widget(
+                        "IconRow",
+                        icon="leaf-circle-outline",
+                        icon_color=self.theme_color,
+                        text=remedio,
                     )
                 )
 
@@ -1514,9 +1676,8 @@ class AgrowillayApp(MDApp):
 
     def _render_nearby_results(self, lat, lon):
         categorias = [
-            ("Viveros cercanos", "vivero"),
-            ("Tiendas de jardineria", "tienda de jardineria"),
-            ("Agronomos e ingenieros agricolas", "ingeniero agronomo"),
+            ("Jardineria y viveros", "vivero jardineria"),
+            ("Tiendas agroveterinarias", "tienda agroveterinaria"),
         ]
         main_screen = self.root.ids.sm.get_screen("main")
         box = main_screen.ids.locator_body
@@ -1530,9 +1691,8 @@ class AgrowillayApp(MDApp):
 
     def _render_manual_search(self):
         categorias = [
-            ("Viveros cercanos", "vivero cerca de mi"),
-            ("Tiendas de jardineria", "tienda de jardineria cerca de mi"),
-            ("Agronomos e ingenieros agricolas", "ingeniero agronomo cerca de mi"),
+            ("Jardineria y viveros", "vivero jardineria cerca de mi"),
+            ("Tiendas agroveterinarias", "tienda agroveterinaria cerca de mi"),
         ]
         main_screen = self.root.ids.sm.get_screen("main")
         box = main_screen.ids.locator_body
@@ -1582,24 +1742,82 @@ class AgrowillayApp(MDApp):
     # Audio: leer el diagnostico en voz alta (texto a voz nativo)
     # ------------------------------------------------------------------
 
-    def speak_diagnosis(self, diagnosis):
-        """Reproduce el diagnostico en audio usando el motor de texto a
-        voz del propio telefono (no gasta llamadas extra a Gemini)."""
-        texto = (
+    def _texto_diagnostico(self, diagnosis):
+        return (
             f"Planta identificada: {diagnosis.get('planta_identificada', '')}. "
             f"Problema: {diagnosis.get('plaga_o_problema', '')}. "
             f"Severidad: {diagnosis.get('severidad', '')}. "
             f"Plan de tratamiento: {'. '.join(diagnosis.get('pasos', []))}. "
             f"Prevencion: {diagnosis.get('prevencion', '')}."
         )
-        try:
-            from plyer import tts
 
-            tts.speak(message=texto)
-        except NotImplementedError:
-            toast("La lectura en voz alta no esta disponible en este dispositivo")
+    def speak_diagnosis(self, diagnosis):
+        """Reproduce el diagnostico en audio. Si ya esta hablando, el
+        mismo boton lo detiene (antes no habia forma de pararlo)."""
+        if self.is_speaking:
+            self.stop_speaking()
+            return
+        if not diagnosis:
+            return
+        texto = self._texto_diagnostico(diagnosis)
+        self.is_speaking = True
+        threading.Thread(
+            target=self._speak_thread, args=(texto, "es"), daemon=True
+        ).start()
+
+    def speak_diagnosis_quechua(self, diagnosis):
+        """Traduce el resumen del diagnostico al quechua con Gemini y lo
+        lee. AVISO HONESTO: casi ningun celular trae una voz en quechua
+        instalada, asi que el audio puede sonar con acento incorrecto o
+        no reproducirse; el texto traducido igual sirve por si solo."""
+        if self.is_speaking:
+            self.stop_speaking()
+            return
+        if not diagnosis:
+            return
+        toast("Traduciendo al quechua...")
+        threading.Thread(
+            target=self._speak_quechua_thread, args=(diagnosis,), daemon=True
+        ).start()
+
+    def _speak_quechua_thread(self, diagnosis):
+        texto_es = self._texto_diagnostico(diagnosis)
+        try:
+            api_key = ConfigManager.load_api_key() or DEFAULT_GEMINI_API_KEY
+            texto_qu = GeminiClient.translate_text(texto_es, "quechua", api_key)
         except Exception:
-            toast("No se pudo reproducir el audio")
+            _write_crash_log(
+                "Error traduciendo a quechua (no crashea la app):\n"
+                + traceback.format_exc()
+            )
+            Clock.schedule_once(
+                lambda dt: toast("No se pudo traducir al quechua ahora")
+            )
+            return
+
+        Clock.schedule_once(lambda dt: setattr(self, "is_speaking", True))
+        self._speak_thread(texto_qu, "qu")
+
+    def _speak_thread(self, texto, locale_code):
+        ok = SpeechManager.speak(texto, locale_code)
+        if not ok:
+            Clock.schedule_once(
+                lambda dt: toast("No se pudo reproducir el audio")
+            )
+        Clock.schedule_once(lambda dt: setattr(self, "is_speaking", False))
+
+    def stop_speaking(self):
+        SpeechManager.stop()
+        self.is_speaking = False
+
+    def on_pause(self):
+        # El usuario sale de la app (a otra app, al Home, etc.): la voz
+        # no debe seguir sonando de fondo.
+        self.stop_speaking()
+        return True
+
+    def on_stop(self):
+        self.stop_speaking()
 
 
 def _write_crash_log(exc_text):
