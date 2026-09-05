@@ -296,6 +296,8 @@ class WeatherClient:
 
     @classmethod
     def get_forecast(cls, lat, lon):
+        import requests  # import local: solo se necesita aqui
+
         url = cls.ENDPOINT.format(lat=lat, lon=lon)
         resp = requests.get(url, timeout=20)
         resp.raise_for_status()
@@ -407,6 +409,7 @@ class SpeechManager:
 
             Locale = autoclass("java.util.Locale")
             TextToSpeech = autoclass("android.speech.tts.TextToSpeech")
+            Bundle = autoclass("android.os.Bundle")
 
             tts = cls._get_engine()
             resultado_idioma = tts.setLanguage(Locale(locale_code))
@@ -421,13 +424,21 @@ class SpeechManager:
                     f"completo en este celular (codigo={resultado_idioma})."
                 )
 
+            # IMPORTANTE: TextToSpeech.speak() tiene dos formas posibles
+            # (una vieja con HashMap, una nueva con Bundle). Pasar None
+            # en vez de un Bundle real hace que pyjnius no sepa cual de
+            # las dos usar y falle SIEMPRE con JavaException. Por eso se
+            # crea un Bundle vacio de verdad.
+            parametros = Bundle()
             intentos = 0
-            resultado = tts.speak(texto, TextToSpeech.QUEUE_FLUSH, None, None)
+            resultado = tts.speak(
+                texto, TextToSpeech.QUEUE_FLUSH, parametros, "agrowillay_tts"
+            )
             while resultado == -1 and intentos < 100:
                 time.sleep(0.1)
                 intentos += 1
                 resultado = tts.speak(
-                    texto, TextToSpeech.QUEUE_FLUSH, None, None
+                    texto, TextToSpeech.QUEUE_FLUSH, parametros, "agrowillay_tts"
                 )
             return resultado != -1
         except Exception:
@@ -470,6 +481,8 @@ class GeminiClient:
         diagnostico en quechua). Sin reintentos con modelo de respaldo:
         es una funcion secundaria, si falla simplemente no se muestra
         la traduccion."""
+        import requests  # import local: solo se necesita aqui
+
         url = GEMINI_ENDPOINT.format(model=GEMINI_MODEL, key=api_key)
         payload = {
             "contents": [
