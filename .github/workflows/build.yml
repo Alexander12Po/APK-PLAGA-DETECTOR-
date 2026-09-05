@@ -36,11 +36,13 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install buildozer cython==0.29.33
-          
+
       - name: Instalar NDK 25b vía sdkmanager
         run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
           yes | sdkmanager --install "ndk;25.1.8937393"
-          
+
       - name: Compilar el APK
         run: |
           yes | buildozer android debug
