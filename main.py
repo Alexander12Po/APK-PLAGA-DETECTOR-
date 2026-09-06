@@ -409,7 +409,6 @@ class SpeechManager:
 
             Locale = autoclass("java.util.Locale")
             TextToSpeech = autoclass("android.speech.tts.TextToSpeech")
-            Bundle = autoclass("android.os.Bundle")
 
             tts = cls._get_engine()
             resultado_idioma = tts.setLanguage(Locale(locale_code))
@@ -424,22 +423,18 @@ class SpeechManager:
                     f"completo en este celular (codigo={resultado_idioma})."
                 )
 
-            # IMPORTANTE: TextToSpeech.speak() tiene dos formas posibles
-            # (una vieja con HashMap, una nueva con Bundle). Pasar None
-            # en vez de un Bundle real hace que pyjnius no sepa cual de
-            # las dos usar y falle SIEMPRE con JavaException. Por eso se
-            # crea un Bundle vacio de verdad.
-            parametros = Bundle()
+            # IMPORTANTE: TextToSpeech.speak() tiene dos formas posibles.
+            # La nueva (CharSequence, int, Bundle, String) le genera a
+            # pyjnius una ambiguedad real entre CharSequence y String que
+            # nunca logra resolver (falla siempre, con o sin Bundle real).
+            # Se usa la forma vieja (String, int, HashMap), la misma que
+            # usa la libreria plyer internamente y que si funciona.
             intentos = 0
-            resultado = tts.speak(
-                texto, TextToSpeech.QUEUE_FLUSH, parametros, "agrowillay_tts"
-            )
+            resultado = tts.speak(texto, TextToSpeech.QUEUE_FLUSH, None)
             while resultado == -1 and intentos < 100:
                 time.sleep(0.1)
                 intentos += 1
-                resultado = tts.speak(
-                    texto, TextToSpeech.QUEUE_FLUSH, parametros, "agrowillay_tts"
-                )
+                resultado = tts.speak(texto, TextToSpeech.QUEUE_FLUSH, None)
             return resultado != -1
         except Exception:
             _write_crash_log(
