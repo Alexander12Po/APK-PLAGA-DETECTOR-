@@ -52,6 +52,11 @@ android.ndk = 25b
 p4a.branch = v2024.01.21
 android.accept_sdk_license = True
 
+# Recipe local para "freetype": el servidor oficial de GNU Savannah lleva
+# horas caido (502/504). Esto le dice a Buildozer que use nuestra copia en
+# p4a-recipes/freetype/, que descarga el mismo archivo desde SourceForge.
+p4a.local_recipes = ./p4a-recipes
+
 # NO fijamos p4a.branch: dejamos que Buildozer use la rama "master" de
 # python-for-android, que es la version estable por defecto.
 
