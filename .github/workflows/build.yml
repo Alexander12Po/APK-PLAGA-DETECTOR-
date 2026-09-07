@@ -39,11 +39,26 @@ jobs:
 
       - name: Compilar el APK
         run: |
-          yes | buildozer android debug
+          set +e
+          intento=1
+          max_intentos=5
+          exito=1
+          while [ $intento -le $max_intentos ]; do
+            echo "=== Intento $intento de $max_intentos ==="
+            yes | buildozer android debug
+            resultado=$?
+            if [ $resultado -eq 0 ]; then
+              exito=0
+              break
+            fi
+            echo "Fallo (probable caida del servidor de descarga). Esperando 30 segundos antes de reintentar..."
+            sleep 30
+            intento=$((intento + 1))
+          done
+          exit $exito
 
       - name: Subir el APK como resultado descargable
         uses: actions/upload-artifact@v4
         with:
           name: agrowillay-apk
           path: bin/*.apk
-          
