@@ -234,6 +234,7 @@ RootLayout:
 
 <RoundIconButton@ButtonBehavior+FloatLayout>:
     icon: "volume-high"
+    bg_color: app.theme_color
     size_hint: None, None
     size: dp(52), dp(52)
     opacity: 0.4 if self.disabled else 1
@@ -244,7 +245,7 @@ RootLayout:
             pos: self.x - dp(1), self.y - dp(3)
             size: self.size
         Color:
-            rgba: app.theme_color
+            rgba: root.bg_color
         Ellipse:
             pos: self.pos
             size: self.size
@@ -1185,19 +1186,54 @@ RootLayout:
                             title_text: "Diagnostico"
                             subtitle_text: "Resultado generado por la IA a partir de tu foto."
 
-                        RoundIconButton:
-                            id: speak_btn
-                            icon: "stop-circle-outline" if app.is_speaking else "volume-high"
-                            disabled: True
+                        MDBoxLayout:
+                            orientation: "vertical"
+                            adaptive_height: True
+                            size_hint_x: None
+                            width: dp(52)
+                            spacing: dp(2)
                             pos_hint: {"center_y": 0.5}
-                            on_release: app.speak_diagnosis(app.last_diagnosis)
 
-                        RoundIconButton:
-                            id: speak_qu_btn
-                            icon: "stop-circle-outline" if app.is_speaking else "translate"
-                            disabled: True
+                            RoundIconButton:
+                                id: speak_btn
+                                icon: "stop-circle-outline" if app.is_speaking else "volume-high"
+                                disabled: True
+                                pos_hint: {"center_x": 0.5}
+                                on_release: app.speak_diagnosis(app.last_diagnosis)
+
+                            MDLabel:
+                                text: "Espanol"
+                                font_style: "Caption"
+                                halign: "center"
+                                text_size: self.width, None
+                                adaptive_height: True
+                                theme_text_color: "Custom"
+                                text_color: 0.75, 0.75, 0.82, 1
+
+                        MDBoxLayout:
+                            orientation: "vertical"
+                            adaptive_height: True
+                            size_hint_x: None
+                            width: dp(68)
+                            spacing: dp(2)
                             pos_hint: {"center_y": 0.5}
-                            on_release: app.speak_diagnosis_quechua(app.last_diagnosis)
+
+                            RoundIconButton:
+                                id: speak_qu_btn
+                                icon: "stop-circle-outline" if app.is_speaking else "translate"
+                                bg_color: 0.85, 0.5, 0.1, 1
+                                disabled: True
+                                pos_hint: {"center_x": 0.5}
+                                on_release: app.speak_diagnosis_quechua(app.last_diagnosis)
+
+                            MDLabel:
+                                text: "Quechua\nCollao"
+                                font_style: "Caption"
+                                halign: "center"
+                                text_size: self.width, None
+                                adaptive_height: True
+                                theme_text_color: "Custom"
+                                text_color: 0.95, 0.65, 0.25, 1
 
                     MDBoxLayout:
                         id: result_body

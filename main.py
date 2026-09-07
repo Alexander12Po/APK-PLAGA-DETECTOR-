@@ -444,6 +444,19 @@ class SpeechManager:
             return False
 
     @classmethod
+    def is_speaking_now(cls):
+        """Consulta real al motor de Android (tts.isSpeaking()) para saber
+        si todavia esta sonando. speak() NO espera a que termine (es
+        asincrono en Android), asi que esto es lo unico confiable para
+        saber cuando de verdad termino de hablar."""
+        if cls._tts is None:
+            return False
+        try:
+            return bool(cls._tts.isSpeaking())
+        except Exception:
+            return False
+
+    @classmethod
     def stop(cls):
         if cls._tts is not None:
             try:
@@ -638,6 +651,7 @@ class AgrowillayApp(MDApp):
     theme_color = hex_to_rgba(COLORS["green_600"])
     current_image_path = StringProperty("")
     is_speaking = BooleanProperty(False)
+    _speech_token = 0
     last_diagnosis = ObjectProperty(None, allownone=True)
     current_tab = StringProperty("home")
 
@@ -1769,8 +1783,11 @@ class AgrowillayApp(MDApp):
             return
         texto = self._texto_diagnostico(diagnosis)
         self.is_speaking = True
+        self._speech_token += 1
         threading.Thread(
-            target=self._speak_thread, args=(texto, "es"), daemon=True
+            target=self._speak_thread,
+            args=(texto, "es", self._speech_token),
+            daemon=True,
         ).start()
 
     def speak_diagnosis_quechua(self, diagnosis):
@@ -1784,11 +1801,14 @@ class AgrowillayApp(MDApp):
         if not diagnosis:
             return
         toast("Traduciendo al quechua...")
+        self._speech_token += 1
         threading.Thread(
-            target=self._speak_quechua_thread, args=(diagnosis,), daemon=True
+            target=self._speak_quechua_thread,
+            args=(diagnosis, self._speech_token),
+            daemon=True,
         ).start()
 
-    def _speak_quechua_thread(self, diagnosis):
+    def _speak_quechua_thread(self, diagnosis, token):
         texto_es = self._texto_diagnostico(diagnosis)
         try:
             api_key = ConfigManager.load_api_key() or DEFAULT_GEMINI_API_KEY
@@ -1803,16 +1823,42 @@ class AgrowillayApp(MDApp):
             )
             return
 
-        Clock.schedule_once(lambda dt: setattr(self, "is_speaking", True))
-        self._speak_thread(texto_qu, "qu")
+        if token != self._speech_token:
+            return  # el usuario ya cancelo o pidio otra lectura mientras se traducia
 
-    def _speak_thread(self, texto, locale_code):
+        Clock.schedule_once(lambda dt: setattr(self, "is_speaking", True))
+        self._speak_thread(texto_qu, "qu", token)
+
+    def _speak_thread(self, texto, locale_code, token):
         ok = SpeechManager.speak(texto, locale_code)
         if not ok:
             Clock.schedule_once(
                 lambda dt: toast("No se pudo reproducir el audio")
             )
-        Clock.schedule_once(lambda dt: setattr(self, "is_speaking", False))
+            if token == self._speech_token:
+                Clock.schedule_once(lambda dt: setattr(self, "is_speaking", False))
+            return
+
+        # SpeechManager.speak() NO espera a que termine de hablar (en
+        # Android es asincrono: la voz recien empieza cuando esto ya
+        # devolvio resultado). Por eso antes el boton de "detener" se
+        # apagaba solo, al toque, aunque la voz seguia sonando, y tocarlo
+        # de nuevo no la paraba (solo la reiniciaba desde cero). Aca se
+        # espera de verdad a que el motor termine (tts.isSpeaking()),
+        # con un limite de seguridad de 60s por si el motor se queda
+        # colgado en "hablando" en algun celular.
+        time.sleep(0.15)
+        espera = 0.0
+        while (
+            SpeechManager.is_speaking_now()
+            and token == self._speech_token
+            and espera < 60.0
+        ):
+            time.sleep(0.2)
+            espera += 0.2
+
+        if token == self._speech_token:
+            Clock.schedule_once(lambda dt: setattr(self, "is_speaking", False))
 
     def stop_speaking(self):
         SpeechManager.stop()
