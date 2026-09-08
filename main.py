@@ -38,7 +38,14 @@ from kivy.core.window import Window
 from kivy.factory import Factory
 from kivy.lang import Builder
 from kivy.metrics import dp
-from kivy.properties import BooleanProperty, ObjectProperty, StringProperty
+from kivy.properties import (
+    BooleanProperty,
+    ListProperty,
+    ObjectProperty,
+    StringProperty,
+)
+from kivy.uix.behaviors import ButtonBehavior
+from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.screenmanager import Screen
 
 from kivymd.app import MDApp
@@ -116,6 +123,15 @@ GEMINI_ENDPOINT = (
 # quedaria expuesta otra vez y habria que revocarla y generar una nueva
 # (en https://aistudio.google.com/apikey) antes de hacerlo publico.
 DEFAULT_GEMINI_API_KEY = "AQ.Ab8RN6JUSmY_mCwVu6L7n2oa05nwvxsf8NbHKdFWd_Tkbo-n0Q"
+
+# Version actual de esta build. El workflow de GitHub Actions publica un
+# release con un tag "v<esta_version>" cada vez que compila el APK; la
+# app compara esta constante contra el tag_name del ultimo release para
+# avisar si hay una version mas nueva.
+APP_VERSION = "1.0.0"
+
+# Repositorio publico donde se publican los releases con el APK.
+GITHUB_REPO = "Alexander12Po/APK-PLAGA-DETECTOR-"
 
 # Mismo prompt que usaba el backend original, para mantener la misma
 # calidad y estructura de diagnóstico.
@@ -465,6 +481,62 @@ class SpeechManager:
                 pass
 
 
+class UpdateChecker:
+    """Consulta el ultimo release publicado en GitHub para avisar si hay
+    una version mas nueva que la instalada. El workflow de GitHub Actions
+    (.github/workflows/build.yml) es el que publica cada release con su
+    tag de version y el APK adjunto."""
+
+    @staticmethod
+    def _version_a_tupla(version_texto):
+        """Convierte '1.10.2' en (1, 10, 2) para comparar bien los
+        numeros (comparar como texto ordenaria '1.9.0' por encima de
+        '1.10.0', que esta mal)."""
+        limpio = (version_texto or "").strip().lstrip("vV")
+        partes = []
+        for parte in limpio.split("."):
+            digitos = "".join(c for c in parte if c.isdigit())
+            partes.append(int(digitos) if digitos else 0)
+        return tuple(partes) or (0,)
+
+    @classmethod
+    def hay_version_nueva(cls, version_actual, version_remota):
+        try:
+            return cls._version_a_tupla(version_remota) > cls._version_a_tupla(
+                version_actual
+            )
+        except Exception:
+            return False
+
+    @classmethod
+    def buscar_ultima_version(cls):
+        """Bloqueante: llamar siempre desde un hilo aparte. Devuelve un
+        dict {"version": "1.2.0", "url_descarga": "https://..."} o None
+        si no hay internet, no hay releases todavia, o algo fallo (nunca
+        interrumpe el arranque de la app)."""
+        import requests  # import local: solo se necesita aqui
+
+        url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+        try:
+            resp = requests.get(
+                url, timeout=15, headers={"Accept": "application/vnd.github+json"}
+            )
+            if resp.status_code != 200:
+                return None
+            data = resp.json()
+            tag = data.get("tag_name", "")
+            apk_url = None
+            for asset in data.get("assets", []):
+                if asset.get("name", "").lower().endswith(".apk"):
+                    apk_url = asset.get("browser_download_url")
+                    break
+            if not tag or not apk_url:
+                return None
+            return {"version": tag, "url_descarga": apk_url}
+        except Exception:
+            return None
+
+
 class GeminiClient:
     """Envía la imagen + el prompt a la API de Gemini y devuelve un dict
     con el diagnóstico. Se ejecuta siempre en un hilo aparte para no
@@ -631,6 +703,24 @@ class MainScreen(Screen):
     pass
 
 
+class RoundIconButton(ButtonBehavior, FloatLayout):
+    """Boton circular con icono (bocina, traducir, nav de Inicio, etc.).
+
+    Antes era una clase dinamica definida solo en el .kv con '@'. Se paso
+    a clase real de Python porque agregar la propiedad nueva "bg_color"
+    (para poder pintar el boton de Quechua de otro color) causaba un
+    crash real en el celular: 'rgba: root.bg_color' se evaluaba a None
+    justo al construir el canvas, porque una propiedad recien creada
+    dentro de una clase '@' no tiene su valor listo a tiempo cuando se
+    usa en el canvas.before de esa misma clase. Con una Property real de
+    Python, el valor por defecto ya existe desde antes de armar el
+    canvas, asi que nunca es None.
+    """
+
+    icon = StringProperty("volume-high")
+    bg_color = ListProperty([0.0706, 0.502, 0.369, 1])  # verde green_600
+
+
 class HomeScreen(Screen):
     pass
 
@@ -664,6 +754,45 @@ class AgrowillayApp(MDApp):
             os.path.dirname(os.path.abspath(__file__)), "agrowillay_ui.kv"
         )
         return Builder.load_file(kv_path)
+
+    def on_start(self):
+        # En segundo plano, sin bloquear el arranque ni molestar si no
+        # hay internet: se fija si hay un release mas nuevo publicado.
+        threading.Thread(target=self._check_updates_thread, daemon=True).start()
+
+    def _check_updates_thread(self):
+        info = UpdateChecker.buscar_ultima_version()
+        if not info:
+            return
+        if UpdateChecker.hay_version_nueva(APP_VERSION, info["version"]):
+            Clock.schedule_once(lambda dt: self._mostrar_dialogo_actualizacion(info))
+
+    def _mostrar_dialogo_actualizacion(self, info):
+        from kivymd.uix.dialog import MDDialog
+        from kivymd.uix.button import MDFlatButton
+
+        def _descargar(*_a):
+            dialog.dismiss()
+            self._open_url(info["url_descarga"])
+
+        dialog = MDDialog(
+            title="Nueva version disponible",
+            text=(
+                f"Hay una version nueva de Agrowillay ({info['version']}).\n"
+                f"Tienes instalada: v{APP_VERSION}."
+            ),
+            buttons=[
+                MDFlatButton(
+                    text="MAS TARDE", on_release=lambda x: dialog.dismiss()
+                ),
+                MDFlatButton(
+                    text="DESCARGAR",
+                    text_color=self.theme_color,
+                    on_release=_descargar,
+                ),
+            ],
+        )
+        dialog.open()
 
     # ------------------------------------------------------------------
     # Navegacion entre pantallas (barra inferior)
