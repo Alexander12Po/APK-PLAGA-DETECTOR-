@@ -36,7 +36,7 @@ fullscreen = 0
 # ---------------------------------------------------------------------------
 # Permisos de Android
 # ---------------------------------------------------------------------------
-android.permissions = INTERNET,CAMERA,ACCESS_FINE_LOCATION,ACCESS_COARSE_LOCATION,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE
+android.permissions = INTERNET,CAMERA,ACCESS_FINE_LOCATION,ACCESS_COARSE_LOCATION,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE,REQUEST_INSTALL_PACKAGES
 
 # ---------------------------------------------------------------------------
 # Configuracion de compilacion Android — VERSIONES ESTABLES
