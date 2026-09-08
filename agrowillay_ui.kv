@@ -1196,7 +1196,7 @@ RootLayout:
 
                             RoundIconButton:
                                 id: speak_btn
-                                icon: "stop-circle-outline" if app.is_speaking else "volume-high"
+                                icon: "stop-circle-outline" if app.speaking_lang == "es" else "volume-high"
                                 disabled: True
                                 pos_hint: {"center_x": 0.5}
                                 on_release: app.speak_diagnosis(app.last_diagnosis)
@@ -1214,20 +1214,20 @@ RootLayout:
                             orientation: "vertical"
                             adaptive_height: True
                             size_hint_x: None
-                            width: dp(68)
+                            width: dp(52)
                             spacing: dp(2)
                             pos_hint: {"center_y": 0.5}
 
                             RoundIconButton:
                                 id: speak_qu_btn
-                                icon: "stop-circle-outline" if app.is_speaking else "translate"
+                                icon: "stop-circle-outline" if app.speaking_lang == "qu" else "translate"
                                 bg_color: 0.85, 0.5, 0.1, 1
                                 disabled: True
                                 pos_hint: {"center_x": 0.5}
                                 on_release: app.speak_diagnosis_quechua(app.last_diagnosis)
 
                             MDLabel:
-                                text: "Quechua\nCollao"
+                                text: "Quechua"
                                 font_style: "Caption"
                                 halign: "center"
                                 text_size: self.width, None

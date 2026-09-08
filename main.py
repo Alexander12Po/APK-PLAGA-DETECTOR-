@@ -39,7 +39,6 @@ from kivy.factory import Factory
 from kivy.lang import Builder
 from kivy.metrics import dp
 from kivy.properties import (
-    BooleanProperty,
     ListProperty,
     ObjectProperty,
     StringProperty,
@@ -740,7 +739,10 @@ class MoreScreen(Screen):
 class AgrowillayApp(MDApp):
     theme_color = hex_to_rgba(COLORS["green_600"])
     current_image_path = StringProperty("")
-    is_speaking = BooleanProperty(False)
+    speaking_lang = StringProperty("")  # "" | "es" | "qu" -- cual boton
+    # de audio esta realmente sonando ahora mismo. Antes speak_btn y
+    # speak_qu_btn compartian is_speaking, asi que tocar cualquiera de
+    # los dos prendia el icono de "detener" en LOS DOS a la vez.
     _speech_token = 0
     last_diagnosis = ObjectProperty(None, allownone=True)
     current_tab = StringProperty("home")
@@ -1903,15 +1905,21 @@ class AgrowillayApp(MDApp):
         )
 
     def speak_diagnosis(self, diagnosis):
-        """Reproduce el diagnostico en audio. Si ya esta hablando, el
-        mismo boton lo detiene (antes no habia forma de pararlo)."""
-        if self.is_speaking:
+        """Reproduce el diagnostico en audio (español). Si ya esta
+        hablando en español, el mismo boton lo detiene. Si esta hablando
+        en quechua, lo interrumpe y arranca en español (antes ambos
+        botones compartian una sola bandera "is_speaking", asi que
+        tocar cualquiera de los dos encendia el icono de "detener" en
+        LOS DOS a la vez, aunque solo uno estuviera sonando)."""
+        if self.speaking_lang == "es":
             self.stop_speaking()
             return
         if not diagnosis:
             return
+        if self.speaking_lang:
+            SpeechManager.stop()  # interrumpe el quechua que estaba sonando
         texto = self._texto_diagnostico(diagnosis)
-        self.is_speaking = True
+        self.speaking_lang = "es"
         self._speech_token += 1
         threading.Thread(
             target=self._speak_thread,
@@ -1924,11 +1932,13 @@ class AgrowillayApp(MDApp):
         lee. AVISO HONESTO: casi ningun celular trae una voz en quechua
         instalada, asi que el audio puede sonar con acento incorrecto o
         no reproducirse; el texto traducido igual sirve por si solo."""
-        if self.is_speaking:
+        if self.speaking_lang == "qu":
             self.stop_speaking()
             return
         if not diagnosis:
             return
+        if self.speaking_lang:
+            SpeechManager.stop()  # interrumpe el español que estaba sonando
         toast("Traduciendo al quechua...")
         self._speech_token += 1
         threading.Thread(
@@ -1955,7 +1965,7 @@ class AgrowillayApp(MDApp):
         if token != self._speech_token:
             return  # el usuario ya cancelo o pidio otra lectura mientras se traducia
 
-        Clock.schedule_once(lambda dt: setattr(self, "is_speaking", True))
+        Clock.schedule_once(lambda dt: setattr(self, "speaking_lang", "qu"))
         self._speak_thread(texto_qu, "qu", token)
 
     def _speak_thread(self, texto, locale_code, token):
@@ -1965,7 +1975,7 @@ class AgrowillayApp(MDApp):
                 lambda dt: toast("No se pudo reproducir el audio")
             )
             if token == self._speech_token:
-                Clock.schedule_once(lambda dt: setattr(self, "is_speaking", False))
+                Clock.schedule_once(lambda dt: setattr(self, "speaking_lang", ""))
             return
 
         # SpeechManager.speak() NO espera a que termine de hablar (en
@@ -1987,11 +1997,11 @@ class AgrowillayApp(MDApp):
             espera += 0.2
 
         if token == self._speech_token:
-            Clock.schedule_once(lambda dt: setattr(self, "is_speaking", False))
+            Clock.schedule_once(lambda dt: setattr(self, "speaking_lang", ""))
 
     def stop_speaking(self):
         SpeechManager.stop()
-        self.is_speaking = False
+        self.speaking_lang = ""
 
     def on_pause(self):
         # El usuario sale de la app (a otra app, al Home, etc.): la voz
