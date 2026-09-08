@@ -127,7 +127,7 @@ DEFAULT_GEMINI_API_KEY = "AQ.Ab8RN6JUSmY_mCwVu6L7n2oa05nwvxsf8NbHKdFWd_Tkbo-n0Q"
 # release con un tag "v<esta_version>" cada vez que compila el APK; la
 # app compara esta constante contra el tag_name del ultimo release para
 # avisar si hay una version mas nueva.
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.0.1"
 
 # Repositorio publico donde se publican los releases con el APK.
 GITHUB_REPO = "Alexander12Po/APK-PLAGA-DETECTOR-"
