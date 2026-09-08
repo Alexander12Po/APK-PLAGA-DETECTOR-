@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   actions: write
 
 jobs:
@@ -26,6 +26,13 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
+
+      - name: Cachear el keystore de firma (para que las actualizaciones
+          se instalen encima de la version anterior, sin pedir desinstalar)
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: agrowillay-debug-keystore-v1
 
       - name: Instalar dependencias del sistema
         run: |
@@ -62,3 +69,17 @@ jobs:
         with:
           name: agrowillay-apk
           path: bin/*.apk
+
+      - name: Leer la version desde main.py
+        id: version
+        run: |
+          VERSION=$(grep -oP '(?<=APP_VERSION = ")[^"]+' main.py)
+          echo "Version detectada: $VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Publicar el release en GitHub con el APK adjunto
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: Agrowillay v${{ steps.version.outputs.version }}
+          files: bin/*.apk
