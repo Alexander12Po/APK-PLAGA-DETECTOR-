@@ -127,7 +127,7 @@ DEFAULT_GEMINI_API_KEY = "AQ.Ab8RN6JUSmY_mCwVu6L7n2oa05nwvxsf8NbHKdFWd_Tkbo-n0Q"
 # release con un tag "v<esta_version>" cada vez que compila el APK; la
 # app compara esta constante contra el tag_name del ultimo release para
 # avisar si hay una version mas nueva.
-APP_VERSION = "1.0.1"
+APP_VERSION = "1.0.2"
 
 # Repositorio publico donde se publican los releases con el APK.
 GITHUB_REPO = "Alexander12Po/APK-PLAGA-DETECTOR-"
@@ -746,6 +746,9 @@ class AgrowillayApp(MDApp):
     _speech_token = 0
     last_diagnosis = ObjectProperty(None, allownone=True)
     current_tab = StringProperty("home")
+    _update_dialog = None
+    _update_progress_bar = None
+    _update_progress_label = None
 
     def build(self):
         self.title = "Agrowillay"
@@ -775,7 +778,7 @@ class AgrowillayApp(MDApp):
 
         def _descargar(*_a):
             dialog.dismiss()
-            self._open_url(info["url_descarga"])
+            self._iniciar_descarga_actualizacion(info["url_descarga"], info["version"])
 
         dialog = MDDialog(
             title="Nueva version disponible",
@@ -783,6 +786,7 @@ class AgrowillayApp(MDApp):
                 f"Hay una version nueva de Agrowillay ({info['version']}).\n"
                 f"Tienes instalada: v{APP_VERSION}."
             ),
+            auto_dismiss=False,
             buttons=[
                 MDFlatButton(
                     text="MAS TARDE", on_release=lambda x: dialog.dismiss()
@@ -795,6 +799,113 @@ class AgrowillayApp(MDApp):
             ],
         )
         dialog.open()
+
+    # ------------------------------------------------------------------
+    # Descarga del APK con barra de progreso + instalacion automatica
+    # ------------------------------------------------------------------
+
+    def _iniciar_descarga_actualizacion(self, url_descarga, version):
+        from kivymd.uix.dialog import MDDialog
+        from kivymd.uix.progressbar import MDProgressBar
+
+        self._update_progress_bar = MDProgressBar(value=0, max=100)
+        self._update_progress_label = MDLabel(
+            text="Descargando 0%",
+            halign="center",
+            size_hint_y=None,
+            height=dp(30),
+        )
+        contenido = MDBoxLayout(
+            orientation="vertical",
+            spacing=dp(12),
+            size_hint_y=None,
+            height=dp(70),
+        )
+        contenido.add_widget(self._update_progress_label)
+        contenido.add_widget(self._update_progress_bar)
+
+        self._update_dialog = MDDialog(
+            title=f"Descargando actualizacion ({version})",
+            type="custom",
+            content_cls=contenido,
+            auto_dismiss=False,
+        )
+        self._update_dialog.open()
+
+        threading.Thread(
+            target=self._descargar_apk_thread, args=(url_descarga,), daemon=True
+        ).start()
+
+    def _descargar_apk_thread(self, url_descarga):
+        import requests
+
+        apk_path = str(APP_DATA_DIR / "actualizacion.apk")
+        try:
+            resp = requests.get(url_descarga, stream=True, timeout=30)
+            resp.raise_for_status()
+            total = int(resp.headers.get("content-length", 0)) or None
+            descargado = 0
+            with open(apk_path, "wb") as f:
+                for chunk in resp.iter_content(chunk_size=65536):
+                    if not chunk:
+                        continue
+                    f.write(chunk)
+                    descargado += len(chunk)
+                    if total:
+                        porcentaje = int(descargado * 100 / total)
+                        Clock.schedule_once(
+                            lambda dt, p=porcentaje: self._actualizar_progreso(p)
+                        )
+            Clock.schedule_once(lambda dt: self._descarga_completa(apk_path))
+        except Exception as exc:  # noqa: BLE001
+            Clock.schedule_once(lambda dt: self._descarga_fallo(str(exc)))
+
+    @mainthread
+    def _actualizar_progreso(self, porcentaje):
+        if self._update_progress_bar:
+            self._update_progress_bar.value = porcentaje
+        if self._update_progress_label:
+            self._update_progress_label.text = f"Descargando {porcentaje}%"
+
+    @mainthread
+    def _descarga_completa(self, apk_path):
+        if self._update_dialog:
+            self._update_dialog.dismiss()
+            self._update_dialog = None
+        toast("Descarga completa, abriendo instalador...")
+        self._instalar_apk(apk_path)
+
+    @mainthread
+    def _descarga_fallo(self, mensaje_error):
+        if self._update_dialog:
+            self._update_dialog.dismiss()
+            self._update_dialog = None
+        toast(f"No se pudo descargar la actualizacion: {mensaje_error}")
+
+    @staticmethod
+    def _instalar_apk(apk_path):
+        if platform != "android":
+            toast("La instalacion solo esta disponible en el celular")
+            return
+        try:
+            from jnius import autoclass
+            from android import mActivity
+
+            Intent = autoclass("android.content.Intent")
+            FileProviderCls = autoclass("androidx.core.content.FileProvider")
+            JavaFile = autoclass("java.io.File")
+
+            apk_file = JavaFile(apk_path)
+            authority = f"{mActivity.getPackageName()}.fileprovider"
+            apk_uri = FileProviderCls.getUriForFile(mActivity, authority, apk_file)
+
+            intent = Intent(Intent.ACTION_VIEW)
+            intent.setDataAndType(apk_uri, "application/vnd.android.package-archive")
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            mActivity.startActivity(intent)
+        except Exception as exc:  # noqa: BLE001
+            toast(f"No se pudo abrir el instalador: {exc}")
 
     # ------------------------------------------------------------------
     # Navegacion entre pantallas (barra inferior)
