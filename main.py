@@ -28,6 +28,7 @@ import shutil
 import threading
 import time
 import traceback
+import wave
 import webbrowser
 from pathlib import Path
 
@@ -109,6 +110,12 @@ GEMINI_MODEL = "gemini-3.7-flash"
 # Si el modelo principal esta saturado (error 503) tras varios reintentos,
 # se prueba con este modelo de respaldo, mucho mas antiguo y estable.
 GEMINI_MODEL_FALLBACK = "gemini-3.6-flash"
+# Modelo separado para generar audio (texto a voz) con Gemini, usado
+# como intento para el boton de Quechua ya que el lector nativo del
+# celular no trae ninguna voz en quechua instalada. Quechua no esta en
+# la lista oficial de idiomas de este modelo, pero al ser generativo
+# (no un sintetizador clasico) puede intentarlo igual.
+GEMINI_TTS_MODEL = "gemini-2.5-flash-preview-tts"
 GEMINI_ENDPOINT = (
     "https://generativelanguage.googleapis.com/v1beta/models/"
     "{model}:generateContent?key={key}"
@@ -117,17 +124,18 @@ GEMINI_ENDPOINT = (
 # Clave de Gemini incluida por defecto para que la app funcione al abrirla,
 # sin que el usuario tenga que configurar nada manualmente.
 #
-# IMPORTANTE: esto SOLO es seguro porque el repositorio de GitHub es
-# PRIVADO. Si en algun momento lo pones publico de nuevo, esta clave
-# quedaria expuesta otra vez y habria que revocarla y generar una nueva
-# (en https://aistudio.google.com/apikey) antes de hacerlo publico.
+# IMPORTANTE: el repositorio de GitHub es PUBLICO (se cambio a publico
+# para que funcione la actualizacion automatica), asi que esta clave
+# esta a la vista de cualquiera. Debe tener un limite de gasto puesto
+# en https://aistudio.google.com/apikey; si alguna vez hay que
+# reemplazarla, se rota ahi mismo.
 DEFAULT_GEMINI_API_KEY = "AQ.Ab8RN6JUSmY_mCwVu6L7n2oa05nwvxsf8NbHKdFWd_Tkbo-n0Q"
 
 # Version actual de esta build. El workflow de GitHub Actions publica un
 # release con un tag "v<esta_version>" cada vez que compila el APK; la
 # app compara esta constante contra el tag_name del ultimo release para
 # avisar si hay una version mas nueva.
-APP_VERSION = "1.0.3"
+APP_VERSION = "1.0.5"
 
 # Repositorio publico donde se publican los releases con el APK.
 GITHUB_REPO = "Alexander12Po/APK-PLAGA-DETECTOR-"
@@ -428,15 +436,22 @@ class SpeechManager:
             tts = cls._get_engine()
             resultado_idioma = tts.setLanguage(Locale(locale_code))
             if resultado_idioma in (-1, -2):
-                # -1 = LANG_MISSING_DATA, -2 = LANG_NOT_SUPPORTED. La
-                # mayoria de celulares NO traen una voz en quechua
-                # instalada; se avisa aca pero se intenta leer igual
-                # (puede sonar con acento incorrecto, o el sistema puede
-                # simplemente no decir nada, segun el fabricante).
+                # -1 = LANG_MISSING_DATA, -2 = LANG_NOT_SUPPORTED. Casi
+                # ningun celular trae una voz en quechua instalada (no
+                # existe en la lista de idiomas de Google TTS). Antes,
+                # en este caso se intentaba hablar igual con el idioma
+                # roto ya puesto, y el motor terminaba rechazando
+                # speak() una y otra vez (10s de reintentos y despues
+                # el aviso "No se pudo reproducir el audio", sin sonar
+                # nada). Ahora, si el idioma pedido no esta disponible,
+                # se cae a español para que al menos SUENE algo (con
+                # acento castellano) en vez de fallar en silencio.
                 _write_crash_log(
                     f"SpeechManager: idioma '{locale_code}' sin soporte "
                     f"completo en este celular (codigo={resultado_idioma})."
                 )
+                if locale_code != "es":
+                    resultado_idioma = tts.setLanguage(Locale("es"))
 
             # IMPORTANTE: TextToSpeech.speak() tiene dos formas posibles.
             # La nueva (CharSequence, int, Bundle, String) le genera a
@@ -476,6 +491,67 @@ class SpeechManager:
         if cls._tts is not None:
             try:
                 cls._tts.stop()
+            except Exception:
+                pass
+
+
+def _pcm_a_wav(pcm_bytes, wav_path, channels=1, rate=24000, sample_width=2):
+    """Envuelve audio PCM crudo (como el que devuelve Gemini TTS) en un
+    archivo .wav de verdad, para que MediaPlayer lo pueda reproducir."""
+    with wave.open(wav_path, "wb") as wf:
+        wf.setnchannels(channels)
+        wf.setsampwidth(sample_width)
+        wf.setframerate(rate)
+        wf.writeframes(pcm_bytes)
+
+
+class GeminiAudioPlayer:
+    """Reproduce los .wav generados por Gemini TTS usando MediaPlayer
+    nativo de Android (via pyjnius). Sigue el mismo patron de instancia
+    unica reutilizable que SpeechManager, para no crear un MediaPlayer
+    nuevo (y su gasto de memoria) cada vez que se lee un diagnostico."""
+
+    _player = None
+
+    @classmethod
+    def _get_player(cls):
+        if cls._player is None:
+            from jnius import autoclass
+
+            MediaPlayer = autoclass("android.media.MediaPlayer")
+            cls._player = MediaPlayer()
+        return cls._player
+
+    @classmethod
+    def play(cls, wav_path):
+        try:
+            player = cls._get_player()
+            player.reset()
+            player.setDataSource(wav_path)
+            player.prepare()
+            player.start()
+            return True
+        except Exception:
+            _write_crash_log(
+                "GeminiAudioPlayer.play() fallo (no crashea la app):\n"
+                + traceback.format_exc()
+            )
+            return False
+
+    @classmethod
+    def is_playing_now(cls):
+        if cls._player is None:
+            return False
+        try:
+            return bool(cls._player.isPlaying())
+        except Exception:
+            return False
+
+    @classmethod
+    def stop(cls):
+        if cls._player is not None:
+            try:
+                cls._player.stop()
             except Exception:
                 pass
 
@@ -586,6 +662,54 @@ class GeminiClient:
         resp.raise_for_status()
         data = resp.json()
         return data["candidates"][0]["content"]["parts"][0]["text"].strip()
+
+    @classmethod
+    def generate_speech(cls, texto: str, api_key: str) -> bytes:
+        """Genera audio (PCM crudo, 24kHz, 16-bit, mono) leyendo 'texto'
+        en voz alta con el modelo de texto-a-voz de Gemini. Se usa para
+        el boton de Quechua: el lector nativo del celular no trae
+        ninguna voz en quechua instalada, pero este modelo, al ser
+        generativo (no un sintetizador clasico de idiomas fijos), puede
+        intentarlo igual aunque quechua no este en su lista oficial de
+        idiomas soportados. SIN garantia de que suene bien o de que
+        funcione siempre (puede fallar por falta de internet, cuota
+        agotada, o que el modelo rechace el idioma) -- quien llama a
+        esto debe tener un plan B (ver _speak_quechua_thread)."""
+        import requests
+
+        url = GEMINI_ENDPOINT.format(model=GEMINI_TTS_MODEL, key=api_key)
+        payload = {
+            "contents": [
+                {
+                    "parts": [
+                        {
+                            "text": (
+                                "Narra el siguiente texto en voz alta, "
+                                "en quechua, con un tono claro y "
+                                "natural, como si le hablaras a un "
+                                "agricultor. No lo traduzcas ni agregues "
+                                "nada mas, lee exactamente este texto:"
+                                "\n\n" + texto
+                            )
+                        }
+                    ]
+                }
+            ],
+            "generationConfig": {
+                "responseModalities": ["AUDIO"],
+                "speechConfig": {
+                    "voiceConfig": {
+                        "prebuiltVoiceConfig": {"voiceName": "Kore"}
+                    }
+                },
+            },
+        }
+        resp = requests.post(url, json=payload, timeout=30)
+        resp.raise_for_status()
+        data = resp.json()
+        parte = data["candidates"][0]["content"]["parts"][0]
+        audio_b64 = parte["inlineData"]["data"]
+        return base64.b64decode(audio_b64)
 
     @classmethod
     def analyze_image(cls, image_path: str, api_key: str) -> dict:
@@ -2028,7 +2152,7 @@ class AgrowillayApp(MDApp):
         if not diagnosis:
             return
         if self.speaking_lang:
-            SpeechManager.stop()  # interrumpe el quechua que estaba sonando
+            self._detener_audio()  # interrumpe el quechua que estaba sonando
         texto = self._texto_diagnostico(diagnosis)
         self.speaking_lang = "es"
         self._speech_token += 1
@@ -2040,16 +2164,19 @@ class AgrowillayApp(MDApp):
 
     def speak_diagnosis_quechua(self, diagnosis):
         """Traduce el resumen del diagnostico al quechua con Gemini y lo
-        lee. AVISO HONESTO: casi ningun celular trae una voz en quechua
-        instalada, asi que el audio puede sonar con acento incorrecto o
-        no reproducirse; el texto traducido igual sirve por si solo."""
+        lee en voz alta. Primero intenta generar el audio de verdad con
+        el modelo de texto-a-voz de Gemini (quechua no esta en su lista
+        oficial de idiomas, pero puede intentarlo igual); si eso falla
+        por cualquier motivo, cae automaticamente al lector nativo del
+        celular (que a su vez lee con acento español si tampoco
+        reconoce quechua, en vez de fallar en silencio)."""
         if self.speaking_lang == "qu":
             self.stop_speaking()
             return
         if not diagnosis:
             return
         if self.speaking_lang:
-            SpeechManager.stop()  # interrumpe el español que estaba sonando
+            self._detener_audio()  # interrumpe el español que estaba sonando
         toast("Traduciendo al quechua...")
         self._speech_token += 1
         threading.Thread(
@@ -2077,7 +2204,55 @@ class AgrowillayApp(MDApp):
             return  # el usuario ya cancelo o pidio otra lectura mientras se traducia
 
         Clock.schedule_once(lambda dt: setattr(self, "speaking_lang", "qu"))
-        self._speak_thread(texto_qu, "qu", token)
+
+        # Intento 1: generar la voz de verdad con Gemini (no esta
+        # garantizado -- quechua no esta en su lista oficial de idiomas
+        # -- pero al ser un modelo generativo puede intentarlo igual).
+        # Si algo falla (sin internet, cuota agotada, respuesta
+        # inesperada), se cae al lector nativo del celular, que a su
+        # vez ya cae solo a español si tampoco reconoce quechua.
+        audio_generado = False
+        try:
+            api_key = ConfigManager.load_api_key() or DEFAULT_GEMINI_API_KEY
+            pcm = GeminiClient.generate_speech(texto_qu, api_key)
+            wav_path = str(APP_DATA_DIR / "audio_quechua_temp.wav")
+            _pcm_a_wav(pcm, wav_path)
+            if token == self._speech_token:
+                audio_generado = self._play_gemini_audio_thread(wav_path, token)
+        except Exception:
+            _write_crash_log(
+                "Gemini TTS de quechua fallo, se usa el lector del "
+                "celular como respaldo (no crashea la app):\n"
+                + traceback.format_exc()
+            )
+
+        if token != self._speech_token:
+            return
+
+        if audio_generado:
+            Clock.schedule_once(lambda dt: setattr(self, "speaking_lang", ""))
+        else:
+            self._speak_thread(texto_qu, "qu", token)
+
+    def _play_gemini_audio_thread(self, wav_path, token):
+        """Reproduce el .wav generado por Gemini y espera (sondeando
+        MediaPlayer.isPlaying(), igual que _speak_thread sondea
+        tts.isSpeaking()) a que termine de verdad, con el mismo limite
+        de seguridad de 60s. Devuelve True si logro reproducirlo."""
+        ok = GeminiAudioPlayer.play(wav_path)
+        if not ok:
+            return False
+
+        time.sleep(0.15)
+        espera = 0.0
+        while (
+            GeminiAudioPlayer.is_playing_now()
+            and token == self._speech_token
+            and espera < 60.0
+        ):
+            time.sleep(0.2)
+            espera += 0.2
+        return True
 
     def _speak_thread(self, texto, locale_code, token):
         ok = SpeechManager.speak(texto, locale_code)
@@ -2110,8 +2285,16 @@ class AgrowillayApp(MDApp):
         if token == self._speech_token:
             Clock.schedule_once(lambda dt: setattr(self, "speaking_lang", ""))
 
-    def stop_speaking(self):
+    def _detener_audio(self):
+        """Para cualquiera de los dos motores de audio que pudiera estar
+        sonando (el lector nativo del celular, o el reproductor del
+        audio generado por Gemini). Los dos metodos .stop() ya son
+        seguros de llamar aunque ese motor no este sonando."""
         SpeechManager.stop()
+        GeminiAudioPlayer.stop()
+
+    def stop_speaking(self):
+        self._detener_audio()
         self.speaking_lang = ""
 
     def on_pause(self):
