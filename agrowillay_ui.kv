@@ -4,21 +4,115 @@
 RootLayout:
 
 # ---------------------------------------------------------------------------
-# Piezas de diseno reutilizables
+# Componentes Reutilizables Modernos (Efecto 3D y Relieve)
 # ---------------------------------------------------------------------------
+
+<SectionCard3D@MDBoxLayout>:
+    orientation: "vertical"
+    padding: dp(18)
+    spacing: dp(14)
+    adaptive_height: True
+    canvas.before:
+        # Sombra inferior (profundidad 3D)
+        Color:
+            rgba: 0, 0, 0, 0.45
+        RoundedRectangle:
+            pos: self.x, self.y - dp(4)
+            size: self.size
+            radius: [20,]
+        # Borde brillante sutil
+        Color:
+            rgba: 0.18, 0.75, 0.50, 0.25
+        RoundedRectangle:
+            pos: self.x - dp(1), self.y - dp(1)
+            size: self.width + dp(2), self.height + dp(2)
+            radius: [21,]
+        # Fondo oscuro principal
+        Color:
+            rgba: 0.08, 0.10, 0.14, 1
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [20,]
 
 <StepBadge@FloatLayout>:
     icon: "numeric-1"
     size_hint: None, None
-    size: dp(44), dp(44)
+    size: dp(42), dp(42)
     canvas.before:
         Color:
-            rgba: 0, 0, 0, 0.12
+            rgba: 0, 0, 0, 0.3
         Ellipse:
-            pos: self.x - dp(1), self.y - dp(3)
+            pos: self.x, self.y - dp(2)
             size: self.size
         Color:
-            rgba: app.theme_color
+            rgba: 0.12, 0.72, 0.48, 1
+        Ellipse:
+            pos: self.pos
+            size: self.size
+
+    MDIcon:
+        icon: root.icon
+        halign: "center"
+        valign: "middle"
+        theme_text_color: "Custom"
+        text_color: 1, 1, 1, 1
+        font_size: "20sp"
+        pos_hint: {"center_x": 0.5, "center_y": 0.5}
+
+<StepHeader@MDBoxLayout>:
+    icon: "numeric-1"
+    title_text: ""
+    subtitle_text: ""
+    adaptive_height: True
+    spacing: dp(12)
+
+    StepBadge:
+        icon: root.icon
+
+    MDBoxLayout:
+        orientation: "vertical"
+        adaptive_height: True
+        spacing: dp(2)
+        pos_hint: {"center_y": 0.5}
+
+        MDLabel:
+            text: root.title_text
+            bold: True
+            font_style: "Subtitle1"
+            theme_text_color: "Custom"
+            text_color: 1, 1, 1, 1
+            adaptive_height: True
+
+        MDLabel:
+            text: root.subtitle_text
+            theme_text_color: "Custom"
+            text_color: 0.7, 0.75, 0.8, 1
+            font_style: "Caption"
+            adaptive_height: True
+
+<PillButton@MDRaisedButton>:
+    md_bg_color: 0.10, 0.68, 0.45, 1
+    text_color: 1, 1, 1, 1
+    elevation: 3
+    size_hint_x: 1
+    height: dp(48)
+    font_size: "15sp"
+
+<RoundIconButton>:
+    icon: "volume-high"
+    bg_color: 0.10, 0.68, 0.45, 1
+    size_hint: None, None
+    size: dp(48), dp(48)
+    opacity: 0.4 if self.disabled else 1
+    canvas.before:
+        Color:
+            rgba: 0, 0, 0, 0.3
+        Ellipse:
+            pos: self.x, self.y - dp(2)
+            size: self.size
+        Color:
+            rgba: root.bg_color
         Ellipse:
             pos: self.pos
             size: self.size
@@ -32,291 +126,65 @@ RootLayout:
         font_size: "22sp"
         pos_hint: {"center_x": 0.5, "center_y": 0.5}
 
-<StepHeader@MDBoxLayout>:
-    icon: "numeric-1"
-    title_text: ""
-    subtitle_text: ""
-    adaptive_height: True
-    spacing: dp(14)
-
-    StepBadge:
-        icon: root.icon
-
-    MDBoxLayout:
-        orientation: "vertical"
-        adaptive_height: True
-        spacing: dp(3)
-
-        MDLabel:
-            text: root.title_text
-            bold: True
-            font_style: "Subtitle1"
-            adaptive_height: True
-
-        MDLabel:
-            text: root.subtitle_text
-            theme_text_color: "Secondary"
-            font_style: "Caption"
-            adaptive_height: True
-
-<SectionCard@MDBoxLayout>:
-    orientation: "vertical"
-    padding: dp(20)
-    spacing: dp(16)
-    adaptive_height: True
-    canvas.before:
-        Color:
-            rgba: 0, 0, 0, 0.08
-        RoundedRectangle:
-            pos: self.x, self.y - dp(3)
-            size: self.size
-            radius: [22,]
-        Color:
-            rgba: 0.09, 0.075, 0.13, 1
-        RoundedRectangle:
-            pos: self.pos
-            size: self.size
-            radius: [22,]
-
-<PillButton@MDRaisedButton>:
-    md_bg_color: app.theme_color
-    text_color: 1, 1, 1, 1
-    elevation: 0
-    size_hint_x: 1
-    height: dp(50)
-    font_size: "15sp"
-
-<GhostButton@MDFlatButton>:
-    md_bg_color: 0.925, 0.965, 0.949, 1
-    text_color: app.theme_color
-    elevation: 0
-    size_hint_x: 1
-    height: dp(50)
-    font_size: "15sp"
-
-<WelcomeStrip@MDBoxLayout>:
-    adaptive_height: True
-    padding: dp(18), dp(14)
-    spacing: dp(14)
-    canvas.before:
-        Color:
-            rgba: app.theme_color
-        RoundedRectangle:
-            pos: self.pos
-            size: self.size
-            radius: [20,]
-        Color:
-            rgba: 1, 1, 1, 0.06
-        Ellipse:
-            pos: self.right - dp(70), self.top - dp(55)
-            size: dp(100), dp(100)
-
-    MDBoxLayout:
-        orientation: "vertical"
-        adaptive_height: True
-        spacing: dp(2)
-        pos_hint: {"center_y": 0.5}
-
-        MDLabel:
-            text: "Hola, bienvenido"
-            bold: True
-            font_style: "Subtitle1"
-            theme_text_color: "Custom"
-            text_color: 1, 1, 1, 1
-            adaptive_height: True
-
-        MDLabel:
-            text: "Identifica plagas al instante con IA"
-            theme_text_color: "Custom"
-            text_color: 1, 1, 1, 0.85
-            font_style: "Caption"
-            adaptive_height: True
-
-    Image:
-        source: "illustrations/potted_plant.png"
-        size_hint: None, None
-        size: dp(66), dp(66)
-        pos_hint: {"center_y": 0.5}
-        allow_stretch: True
-        keep_ratio: True
-<SeverityChip@MDBoxLayout>:
-    text: ""
-    chip_color: 0.77, 0.5, 0.1, 1
-    adaptive_size: True
-    padding: dp(16), dp(7)
-    canvas.before:
-        Color:
-            rgba: root.chip_color
-        RoundedRectangle:
-            pos: self.pos
-            size: self.size
-            radius: [dp(16),]
-
-    MDLabel:
-        text: root.text
-        bold: True
-        theme_text_color: "Custom"
-        text_color: 1, 1, 1, 1
-        font_style: "Caption"
-        adaptive_size: True
-
-<IconRow@MDBoxLayout>:
-    icon: "check-circle-outline"
-    icon_color: 0, 0, 0, 1
-    text: ""
-    adaptive_height: True
-    spacing: dp(10)
-    padding: 0, dp(4)
-
-    MDIcon:
-        icon: root.icon
-        theme_text_color: "Custom"
-        text_color: root.icon_color
-        font_size: "20sp"
-        size_hint: None, None
-        size: dp(24), dp(24)
-        pos_hint: {"top": 1}
-
-    MDLabel:
-        text: root.text
-        markup: True
-        adaptive_height: True
-
-# Tarjeta compacta de una entrada del historial (foto + fecha + resumen).
-# Al tocarla, main.py abre el detalle completo en un dialogo.
-<HistoryEntryCard@ButtonBehavior+MDBoxLayout>:
-    foto: ""
-    fecha: ""
-    resumen: ""
-    padding: dp(10)
-    spacing: dp(12)
-    adaptive_height: True
-    canvas.before:
-        Color:
-            rgba: 0.09, 0.075, 0.13, 1
-        RoundedRectangle:
-            pos: self.pos
-            size: self.size
-            radius: [14,]
-
-    Image:
-        source: root.foto if root.foto else "illustrations/potted_plant.png"
-        size_hint: None, None
-        size: dp(52), dp(52)
-        allow_stretch: True
-        keep_ratio: True
-
-    MDBoxLayout:
-        orientation: "vertical"
-        adaptive_height: True
-        spacing: dp(2)
-        pos_hint: {"center_y": 0.5}
-
-        MDLabel:
-            text: root.fecha
-            theme_text_color: "Hint"
-            font_style: "Caption"
-            adaptive_height: True
-
-        MDLabel:
-            text: root.resumen
-            bold: True
-            adaptive_height: True
-
-    MDIcon:
-        icon: "chevron-right"
-        theme_text_color: "Hint"
-        halign: "center"
-        text_size: self.width, None
-        size_hint_x: None
-        width: dp(24)
-        pos_hint: {"center_y": 0.5}
-
-<RoundIconButton>:
-    icon: "volume-high"
-    bg_color: app.theme_color
-    size_hint: None, None
-    size: dp(52), dp(52)
-    opacity: 0.4 if self.disabled else 1
-    canvas.before:
-        Color:
-            rgba: 0, 0, 0, 0.12
-        Ellipse:
-            pos: self.x - dp(1), self.y - dp(3)
-            size: self.size
-        Color:
-            rgba: root.bg_color
-        Ellipse:
-            pos: self.pos
-            size: self.size
-
-    MDIcon:
-        icon: root.icon
-        halign: "center"
-        theme_text_color: "Custom"
-        text_color: 1, 1, 1, 1
-        font_size: "24sp"
-        pos_hint: {"center_x": 0.5, "center_y": 0.5}
-
-# Tarjeta de "Acciones rapidas" en Inicio: icono + titulo + subtitulo,
-# con ripple al tocar.
 <QuickAction@ButtonBehavior+MDBoxLayout>:
     icon: "camera-outline"
-    icon_bg: 0.90, 0.96, 0.93, 1
+    icon_bg: 0.12, 0.72, 0.48, 0.18
     title_text: ""
     subtitle_text: ""
     orientation: "vertical"
     size_hint_y: None
-    height: dp(118)
+    height: dp(112)
     padding: dp(14)
     spacing: dp(6)
     canvas.before:
         Color:
-            rgba: 0, 0, 0, 0.08
+            rgba: 0, 0, 0, 0.35
         RoundedRectangle:
             pos: self.x, self.y - dp(3)
             size: self.size
-            radius: [18,]
+            radius: [16,]
         Color:
-            rgba: 0.09, 0.075, 0.13, 1
+            rgba: 0.09, 0.11, 0.16, 1
         RoundedRectangle:
             pos: self.pos
             size: self.size
-            radius: [18,]
+            radius: [16,]
 
     FloatLayout:
         size_hint: None, None
-        size: dp(38), dp(38)
+        size: dp(36), dp(36)
         canvas.before:
             Color:
                 rgba: root.icon_bg
             RoundedRectangle:
                 pos: self.pos
                 size: self.size
-                radius: [12,]
+                radius: [10,]
 
         MDIcon:
             icon: root.icon
             halign: "center"
             valign: "middle"
             theme_text_color: "Custom"
-            text_color: app.theme_color
+            text_color: 0.20, 0.85, 0.55, 1
             font_size: "20sp"
             pos_hint: {"center_x": 0.5, "center_y": 0.5}
 
     MDLabel:
         text: root.title_text
         bold: True
+        theme_text_color: "Custom"
+        text_color: 1, 1, 1, 1
         font_style: "Body2"
         adaptive_height: True
 
     MDLabel:
         text: root.subtitle_text
-        theme_text_color: "Secondary"
+        theme_text_color: "Custom"
+        text_color: 0.65, 0.70, 0.75, 1
         font_style: "Caption"
         adaptive_height: True
 
-# Tarjeta pequena numerada para "Como funciona"
 <MiniStepCard@MDBoxLayout>:
     number: "1"
     icon: "camera-outline"
@@ -327,11 +195,11 @@ RootLayout:
     padding: dp(12)
     canvas.before:
         Color:
-            rgba: 0.09, 0.075, 0.13, 1
+            rgba: 0.08, 0.10, 0.15, 1
         RoundedRectangle:
             pos: self.pos
             size: self.size
-            radius: [16,]
+            radius: [14,]
 
     MDBoxLayout:
         adaptive_size: True
@@ -340,10 +208,10 @@ RootLayout:
 
         FloatLayout:
             size_hint: None, None
-            size: dp(22), dp(22)
+            size: dp(20), dp(20)
             canvas.before:
                 Color:
-                    rgba: app.theme_color
+                    rgba: 0.12, 0.72, 0.48, 1
                 Ellipse:
                     pos: self.pos
                     size: self.size
@@ -360,92 +228,150 @@ RootLayout:
         MDIcon:
             icon: root.icon
             theme_text_color: "Custom"
-            text_color: app.theme_color
-            font_size: "20sp"
+            text_color: 0.20, 0.85, 0.55, 1
+            font_size: "18sp"
 
     MDLabel:
         text: root.text
         font_style: "Caption"
         halign: "center"
         theme_text_color: "Custom"
-        text_color: 0.85, 0.85, 0.88, 1
-        text_size: self.width, None
+        text_color: 0.80, 0.83, 0.88, 1
         adaptive_height: True
 
-# Item de texto simple para pantallas Consejos / Mas
 <SimpleTip@MDBoxLayout>:
     icon: "leaf"
     title_text: ""
     body_text: ""
     orientation: "vertical"
     adaptive_height: True
-    padding: dp(18)
+    padding: dp(16)
     spacing: dp(6)
     canvas.before:
         Color:
-            rgba: 0, 0, 0, 0.06
+            rgba: 0, 0, 0, 0.25
         RoundedRectangle:
             pos: self.x, self.y - dp(2)
             size: self.size
-            radius: [18,]
+            radius: [16,]
         Color:
-            rgba: 0.09, 0.075, 0.13, 1
+            rgba: 0.08, 0.10, 0.15, 1
         RoundedRectangle:
             pos: self.pos
             size: self.size
-            radius: [18,]
+            radius: [16,]
 
     MDBoxLayout:
         adaptive_height: True
-        spacing: dp(10)
+        spacing: dp(8)
 
         MDIcon:
             icon: root.icon
             theme_text_color: "Custom"
-            text_color: app.theme_color
-            font_size: "22sp"
+            text_color: 0.20, 0.85, 0.55, 1
+            font_size: "20sp"
             size_hint_x: None
-            width: dp(28)
+            width: dp(26)
 
         MDLabel:
             text: root.title_text
             bold: True
+            theme_text_color: "Custom"
+            text_color: 1, 1, 1, 1
             font_style: "Subtitle2"
             adaptive_height: True
 
     MDLabel:
         text: root.body_text
-        theme_text_color: "Secondary"
+        theme_text_color: "Custom"
+        text_color: 0.70, 0.75, 0.80, 1
+        font_style: "Caption"
         adaptive_height: True
 
-# Boton de la lista "Mas" (Ajustes, Idioma, Acerca de...)
-<MoreListItem@ButtonBehavior+MDBoxLayout>:
-    icon: "cog-outline"
+<SeverityChip@MDBoxLayout>:
+    text: ""
+    chip_color: 0.77, 0.5, 0.1, 1
+    adaptive_size: True
+    padding: dp(14), dp(5)
+    canvas.before:
+        Color:
+            rgba: root.chip_color
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [dp(12),]
+
+    MDLabel:
+        text: root.text
+        bold: True
+        theme_text_color: "Custom"
+        text_color: 1, 1, 1, 1
+        font_style: "Caption"
+        adaptive_size: True
+
+<IconRow@MDBoxLayout>:
+    icon: "check-circle-outline"
+    icon_color: 0.20, 0.85, 0.55, 1
     text: ""
     adaptive_height: True
-    padding: dp(6), dp(14)
-    spacing: dp(16)
+    spacing: dp(8)
+    padding: 0, dp(3)
 
     MDIcon:
         icon: root.icon
         theme_text_color: "Custom"
-        text_color: app.theme_color
+        text_color: root.icon_color
+        font_size: "18sp"
+        size_hint: None, None
+        size: dp(22), dp(22)
+        pos_hint: {"top": 1}
+
+    MDLabel:
+        text: root.text
+        markup: True
+        theme_text_color: "Custom"
+        text_color: 0.90, 0.92, 0.95, 1
+        font_style: "Body2"
+        adaptive_height: True
+
+<MoreListItem@ButtonBehavior+MDBoxLayout>:
+    icon: "cog-outline"
+    text: ""
+    badge_text: ""
+    adaptive_height: True
+    padding: dp(8), dp(14)
+    spacing: dp(14)
+    canvas.before:
+        Color:
+            rgba: 0.08, 0.10, 0.14, 1
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [14,]
+
+    MDIcon:
+        icon: root.icon
+        theme_text_color: "Custom"
+        text_color: 0.20, 0.85, 0.55, 1
         font_size: "22sp"
         size_hint_x: None
         width: dp(28)
 
     MDLabel:
         text: root.text
+        bold: True
+        theme_text_color: "Custom"
+        text_color: 1, 1, 1, 1
         adaptive_height: True
         pos_hint: {"center_y": 0.5}
 
     MDIcon:
         icon: "chevron-right"
-        theme_text_color: "Hint"
+        theme_text_color: "Custom"
+        text_color: 0.45, 0.50, 0.55, 1
         size_hint_x: None
         width: dp(24)
 
-# Boton de la barra de navegacion inferior
 <NavButton@ButtonBehavior+MDBoxLayout>:
     icon: "home-outline"
     text: ""
@@ -456,17 +382,17 @@ RootLayout:
 
     FloatLayout:
         size_hint_y: None
-        height: dp(26)
+        height: dp(24)
 
         MDIcon:
             icon: root.icon
             size_hint: None, None
-            size: dp(26), dp(26)
+            size: dp(24), dp(24)
             pos_hint: {"center_x": 0.5, "center_y": 0.5}
             halign: "center"
             valign: "middle"
             theme_text_color: "Custom"
-            text_color: app.theme_color if root.active else (0.6, 0.63, 0.61, 1)
+            text_color: (0.22, 0.88, 0.58, 1) if root.active else (0.50, 0.55, 0.62, 1)
             font_size: "22sp"
 
     MDLabel:
@@ -474,12 +400,12 @@ RootLayout:
         halign: "center"
         font_style: "Caption"
         theme_text_color: "Custom"
-        text_color: app.theme_color if root.active else (0.6, 0.63, 0.61, 1)
+        text_color: (0.22, 0.88, 0.58, 1) if root.active else (0.50, 0.55, 0.62, 1)
         bold: root.active
         adaptive_height: True
 
 # ---------------------------------------------------------------------------
-# Layout raiz: ScreenManager + barra de navegacion inferior persistente
+# Layout Raíz + Barra Inferior 3D
 # ---------------------------------------------------------------------------
 
 <RootLayout@MDBoxLayout>:
@@ -491,29 +417,31 @@ RootLayout:
         HomeScreen:
         MainScreen:
         HistoryScreen:
+        AgroveterinariasScreen:
+        AdminScreen:
         TipsScreen:
         MoreScreen:
 
+    # Barra Inferior Flotante con Relieve
     MDBoxLayout:
         size_hint_y: None
-        height: dp(68)
-        padding: dp(4), 0
+        height: dp(66)
+        padding: dp(6), 0
         canvas.before:
             Color:
-                rgba: 0, 0, 0, 0.1
+                rgba: 0, 0, 0, 0.5
             RoundedRectangle:
                 pos: self.x, self.y + dp(2)
                 size: self.size
-                radius: [22, 22, 0, 0]
+                radius: [20, 20, 0, 0]
             Color:
-                rgba: 0.09, 0.075, 0.13, 1
+                rgba: 0.06, 0.08, 0.12, 1
             RoundedRectangle:
                 pos: self.pos
                 size: self.size
-                radius: [22, 22, 0, 0]
+                radius: [20, 20, 0, 0]
 
         MDBoxLayout:
-
             NavButton:
                 icon: "home-variant"
                 text: "Inicio"
@@ -522,33 +450,34 @@ RootLayout:
 
             NavButton:
                 icon: "clipboard-text-outline"
-                text: "Diagnosticos"
+                text: "Historial"
                 active: app.current_tab == "history"
                 on_release: app.go_history()
 
             FloatLayout:
                 size_hint_x: None
-                width: dp(64)
+                width: dp(60)
 
                 RoundIconButton:
                     icon: "leaf"
+                    bg_color: 0.12, 0.78, 0.50, 1
                     pos_hint: {"center_x": 0.5, "center_y": 0.6}
                     on_release: app.go_diagnosis()
 
             NavButton:
-                icon: "lightbulb-outline"
-                text: "Consejos"
-                active: app.current_tab == "tips"
-                on_release: app.go_tips()
+                icon: "store-marker-outline"
+                text: "Agrovets"
+                active: app.current_tab == "agrovets"
+                on_release: app.go_agrovets()
 
             NavButton:
                 icon: "dots-horizontal"
-                text: "Mas"
+                text: "Más"
                 active: app.current_tab == "more"
                 on_release: app.go_more()
 
 # ---------------------------------------------------------------------------
-# Pantalla INICIO
+# Pantalla INICIO: Clima 3D, Acciones Rápidas y Guía
 # ---------------------------------------------------------------------------
 
 <HomeScreen>:
@@ -556,39 +485,87 @@ RootLayout:
 
     MDBoxLayout:
         orientation: "vertical"
-        md_bg_color: 0.043, 0.035, 0.07, 1
+        md_bg_color: 0.04, 0.05, 0.08, 1
 
         MDTopAppBar:
             title: "Agrowillay"
             elevation: 0
-            md_bg_color: 0.043, 0.035, 0.07, 1
+            md_bg_color: 0.04, 0.05, 0.08, 1
             specific_text_color: 1, 1, 1, 1
-            left_action_items: [["leaf", lambda x: None]]
-            right_action_items: [["dots-horizontal", lambda x: app.go_more()]]
+            left_action_items: [["sprout", lambda x: None]]
+            right_action_items: [["shield-lock", lambda x: app.prompt_admin_code()]]
 
         ScrollView:
             do_scroll_x: False
             MDBoxLayout:
                 orientation: "vertical"
                 adaptive_height: True
-                padding: [dp(16), dp(20), dp(16), dp(24)]
-                spacing: dp(20)
+                padding: [dp(16), dp(12), dp(16), dp(24)]
+                spacing: dp(18)
 
-                WelcomeStrip:
+                # Banner Bienvenida con Relieve 3D
+                MDBoxLayout:
+                    adaptive_height: True
+                    padding: dp(18), dp(16)
+                    spacing: dp(14)
+                    canvas.before:
+                        Color:
+                            rgba: 0, 0, 0, 0.4
+                        RoundedRectangle:
+                            pos: self.x, self.y - dp(3)
+                            size: self.size
+                            radius: [18,]
+                        Color:
+                            rgba: 0.10, 0.58, 0.38, 1
+                        RoundedRectangle:
+                            pos: self.pos
+                            size: self.size
+                            radius: [18,]
 
-                SectionCard:
+                    MDBoxLayout:
+                        orientation: "vertical"
+                        adaptive_height: True
+                        spacing: dp(3)
+                        pos_hint: {"center_y": 0.5}
 
+                        MDLabel:
+                            text: "¡Hola, Agricultor!"
+                            bold: True
+                            font_style: "H6"
+                            theme_text_color: "Custom"
+                            text_color: 1, 1, 1, 1
+                            adaptive_height: True
+
+                        MDLabel:
+                            text: "Diagnóstico con IA y red de agroveterinarias en tiempo real."
+                            theme_text_color: "Custom"
+                            text_color: 0.90, 0.98, 0.94, 1
+                            font_style: "Caption"
+                            adaptive_height: True
+
+                    MDIcon:
+                        icon: "shield-bug-outline"
+                        font_size: "46sp"
+                        theme_text_color: "Custom"
+                        text_color: 1, 1, 1, 0.9
+                        size_hint: None, None
+                        size: dp(50), dp(50)
+                        pos_hint: {"center_y": 0.5}
+
+                # Widget del Clima 3D
+                SectionCard3D:
                     MDBoxLayout:
                         adaptive_height: True
                         spacing: dp(10)
 
                         StepHeader:
-                            icon: "weather-lightning-rainy"
-                            title_text: "Alertas climaticas"
-                            subtitle_text: "Heladas, lluvias fuertes y riesgo de plagas en tu zona."
+                            icon: "weather-partly-cloudy"
+                            title_text: "Clima y Riesgo Agrícola"
+                            subtitle_text: "Pronóstico 3 días y alertas de heladas"
 
                         RoundIconButton:
                             icon: "refresh"
+                            bg_color: 0.15, 0.22, 0.30, 1
                             pos_hint: {"center_y": 0.5}
                             on_release: app.check_weather_alerts()
 
@@ -599,14 +576,17 @@ RootLayout:
                         spacing: dp(8)
 
                         MDLabel:
-                            text: "Toca el boton para revisar el pronostico de tu zona."
-                            theme_text_color: "Hint"
+                            text: "Presiona el botón para actualizar el clima y alertas de tu zona."
+                            theme_text_color: "Custom"
+                            text_color: 0.70, 0.75, 0.80, 1
                             adaptive_height: True
 
                 MDLabel:
-                    text: "Acciones rapidas"
+                    text: "Acciones Rápidas"
                     font_style: "H6"
                     bold: True
+                    theme_text_color: "Custom"
+                    text_color: 1, 1, 1, 1
                     adaptive_height: True
 
                 MDGridLayout:
@@ -615,477 +595,88 @@ RootLayout:
                     adaptive_height: True
 
                     QuickAction:
-                        icon: "camera-outline"
-                        icon_bg: 0.90, 0.96, 0.93, 1
-                        title_text: "Tomar foto"
-                        subtitle_text: "Con camara"
+                        icon: "camera"
+                        title_text: "Tomar Foto"
+                        subtitle_text: "Analizar con cámara"
                         on_release: app.home_take_photo()
 
                     QuickAction:
-                        icon: "image-multiple-outline"
-                        icon_bg: 0.90, 0.96, 0.93, 1
-                        title_text: "Subir imagen"
-                        subtitle_text: "De galeria"
+                        icon: "image-multiple"
+                        title_text: "Subir Foto"
+                        subtitle_text: "Desde tu galería"
                         on_release: app.home_choose_gallery()
 
                     QuickAction:
-                        icon: "clipboard-text-outline"
-                        icon_bg: 0.98, 0.94, 0.85, 1
-                        title_text: "Mis diagnosticos"
-                        subtitle_text: "Ver historial"
-                        on_release: app.go_history()
+                        icon: "store"
+                        title_text: "Agroveterinarias"
+                        subtitle_text: "Teléfonos y WhatsApp"
+                        on_release: app.go_agrovets()
 
                     QuickAction:
-                        icon: "map-marker-radius-outline"
-                        icon_bg: 0.87, 0.92, 0.99, 1
-                        title_text: "Ayuda cercana"
-                        subtitle_text: "Viveros y tiendas"
+                        icon: "map-search"
+                        title_text: "En Google Maps"
+                        subtitle_text: "Tiendas cercanas"
                         on_release: app.home_show_help()
 
-                Image:
-                    source: "illustrations/potted_plant.png"
-                    size_hint_y: None
-                    height: dp(120)
-                    allow_stretch: True
-                    keep_ratio: True
-
                 SimpleTip:
-                    icon: "leaf"
-                    title_text: "Consejo del dia"
-                    body_text: "Revisa regularmente el enves de las hojas, ahi suelen esconderse muchas plagas."
-
-                MDBoxLayout:
-                    adaptive_height: True
-                    spacing: dp(8)
-
-                    Image:
-                        source: "illustrations/glow_sphere.png"
-                        size_hint: None, None
-                        size: dp(36), dp(36)
-                        allow_stretch: True
-                        keep_ratio: True
-
-                    MDLabel:
-                        text: "Como funciona?"
-                        font_style: "H6"
-                        bold: True
-                        adaptive_height: True
-                        valign: "middle"
-
-                MDGridLayout:
-                    cols: 2
-                    spacing: dp(12)
-                    adaptive_height: True
-
-                    MiniStepCard:
-                        number: "1"
-                        icon: "camera-outline"
-                        text: "Toma o sube una foto clara"
-
-                    MiniStepCard:
-                        number: "2"
-                        icon: "magnify-scan"
-                        text: "La IA analiza la imagen"
-
-                    MiniStepCard:
-                        number: "3"
-                        icon: "shield-check-outline"
-                        text: "Recibe el diagnostico y causa"
-
-                    MiniStepCard:
-                        number: "4"
-                        icon: "sprout-outline"
-                        text: "Obten un plan de tratamiento"
+                    icon: "lightbulb-on-outline"
+                    title_text: "Consejo de Hoy"
+                    body_text: "Inspecciona el envés de las hojas y tallos nuevos; ahí comienzan la mayoría de plagas y hongos."
 
 # ---------------------------------------------------------------------------
-# Pantalla DIAGNOSTICO (paso a paso: foto -> analisis -> ayuda cercana)
+# Pantalla DIAGNÓSTICO (Paso a Paso con IA)
 # ---------------------------------------------------------------------------
-
-# ---------------------------------------------------------------------------
-# Piezas exclusivas de la pantalla Diagnostico (tema morado oscuro)
-# ---------------------------------------------------------------------------
-
-<DiagBadge@MDBoxLayout>:
-    icon: "shield-check-outline"
-    text: ""
-    adaptive_size: True
-    spacing: dp(6)
-
-    MDIcon:
-        icon: root.icon
-        theme_text_color: "Custom"
-        text_color: 0.68, 0.56, 0.98, 1
-        font_size: "15sp"
-        adaptive_size: True
-
-    MDLabel:
-        text: root.text
-        theme_text_color: "Custom"
-        text_color: 0.82, 0.78, 0.92, 1
-        font_style: "Caption"
-        adaptive_size: True
-
-<DarkCard@MDBoxLayout>:
-    orientation: "vertical"
-    padding: dp(20)
-    spacing: dp(16)
-    adaptive_height: True
-    canvas.before:
-        Color:
-            rgba: 0.09, 0.075, 0.13, 1
-        RoundedRectangle:
-            pos: self.pos
-            size: self.size
-            radius: [22,]
-
-<DiagCaptureRow@ButtonBehavior+MDBoxLayout>:
-    icon: "camera"
-    title_text: ""
-    subtitle_text: ""
-    icon_bg: 0.42, 0.29, 0.86, 1
-    spacing: dp(12)
-    padding: dp(12), dp(10)
-    adaptive_height: True
-    canvas.before:
-        Color:
-            rgba: 0.14, 0.12, 0.19, 1
-        RoundedRectangle:
-            pos: self.pos
-            size: self.size
-            radius: [14,]
-
-    FloatLayout:
-        size_hint: None, None
-        size: dp(38), dp(38)
-        canvas.before:
-            Color:
-                rgba: root.icon_bg
-            RoundedRectangle:
-                pos: self.pos
-                size: self.size
-                radius: [11,]
-
-        MDIcon:
-            icon: root.icon
-            halign: "center"
-            valign: "middle"
-            theme_text_color: "Custom"
-            text_color: 1, 1, 1, 1
-            font_size: "18sp"
-            pos_hint: {"center_x": 0.5, "center_y": 0.5}
-
-    MDBoxLayout:
-        orientation: "vertical"
-        adaptive_height: True
-        spacing: dp(1)
-        pos_hint: {"center_y": 0.5}
-
-        MDLabel:
-            text: root.title_text
-            bold: True
-            theme_text_color: "Custom"
-            text_color: 1, 1, 1, 1
-            font_style: "Body2"
-            adaptive_height: True
-
-        MDLabel:
-            text: root.subtitle_text
-            theme_text_color: "Custom"
-            text_color: 0.6, 0.58, 0.65, 1
-            font_style: "Caption"
-            adaptive_height: True
-
-<GradientButton@ButtonBehavior+MDBoxLayout>:
-    text: "ANALIZAR PLANTA"
-    padding: dp(20), 0
-    size_hint_y: None
-    height: dp(54)
-    canvas.before:
-        Color:
-            rgba: 0.94, 0.5, 0.2, 1
-        RoundedRectangle:
-            pos: self.pos
-            size: self.size
-            radius: [27,]
-        Color:
-            rgba: 0.82, 0.28, 0.4, 1
-        RoundedRectangle:
-            pos: self.x + self.width * 0.36, self.y
-            size: self.width * 0.4, self.height
-            radius: [4,]
-        Color:
-            rgba: 0.5, 0.32, 0.88, 1
-        RoundedRectangle:
-            pos: self.x + self.width * 0.66, self.y
-            size: self.width * 0.34, self.height
-            radius: [4, 27, 27, 4]
-
-    MDLabel:
-        text: root.text
-        bold: True
-        theme_text_color: "Custom"
-        text_color: 1, 1, 1, 1
-        font_style: "Body1"
-
-    FloatLayout:
-        size_hint: None, None
-        size: dp(36), dp(36)
-        pos_hint: {"center_y": 0.5}
-        canvas.before:
-            Color:
-                rgba: 0, 0, 0, 0.35
-            Ellipse:
-                pos: self.pos
-                size: self.size
-
-        MDIcon:
-            icon: "arrow-right"
-            halign: "center"
-            valign: "middle"
-            theme_text_color: "Custom"
-            text_color: 1, 1, 1, 1
-            font_size: "18sp"
-            pos_hint: {"center_x": 0.5, "center_y": 0.5}
-
-<DiagIconBtn@ButtonBehavior+FloatLayout>:
-    icon: "arrow-left"
-    bg_color: 0.14, 0.12, 0.19, 1
-    border_color: 0, 0, 0, 0
-    size_hint: None, None
-    size: dp(54), dp(54)
-    canvas.before:
-        Color:
-            rgba: self.bg_color
-        Ellipse:
-            pos: self.pos
-            size: self.size
-        Color:
-            rgba: self.border_color
-        Line:
-            width: 1.4
-            circle: (self.center_x, self.center_y, self.width / 2 - 1)
-
-    MDIcon:
-        icon: root.icon
-        halign: "center"
-        valign: "middle"
-        theme_text_color: "Custom"
-        text_color: 1, 1, 1, 1
-        font_size: "26sp"
-        pos_hint: {"center_x": 0.5, "center_y": 0.5}
 
 <MainScreen>:
     name: "main"
 
     MDBoxLayout:
         orientation: "vertical"
-        md_bg_color: 0.043, 0.035, 0.07, 1
+        md_bg_color: 0.04, 0.05, 0.08, 1
 
-        MDBoxLayout:
-            size_hint_y: None
-            height: dp(86)
-            padding: dp(14), dp(16), dp(14), dp(6)
-            spacing: dp(10)
-
-            DiagIconBtn:
-                icon: "arrow-left"
-                pos_hint: {"center_y": 0.6}
-                on_release: app.go_home()
-
-            MDBoxLayout:
-                orientation: "vertical"
-                adaptive_height: True
-                pos_hint: {"center_y": 0.6}
-
-                MDLabel:
-                    text: "Diagnostico"
-                    bold: True
-                    font_style: "H6"
-                    halign: "center"
-                    theme_text_color: "Custom"
-                    text_color: 1, 1, 1, 1
-                    adaptive_height: True
-
-                MDLabel:
-                    text: "Detecta plagas y enfermedades al instante"
-                    halign: "center"
-                    theme_text_color: "Custom"
-                    text_color: 0.62, 0.6, 0.68, 1
-                    font_style: "Caption"
-                    adaptive_height: True
-
-            DiagIconBtn:
-                icon: "help-circle-outline"
-                border_color: 0.5, 0.35, 0.9, 1
-                pos_hint: {"center_y": 0.6}
-                on_release: app.show_help_dialog()
+        MDTopAppBar:
+            title: "Diagnóstico Inteligente"
+            elevation: 0
+            md_bg_color: 0.04, 0.05, 0.08, 1
+            specific_text_color: 1, 1, 1, 1
+            left_action_items: [["arrow-left", lambda x: app.go_home()]]
+            right_action_items: [["help-circle-outline", lambda x: app.show_help_dialog()]]
 
         ScrollView:
             do_scroll_x: False
             MDBoxLayout:
-                id: content_box
                 orientation: "vertical"
                 adaptive_height: True
-                padding: [dp(16), dp(6), dp(16), dp(30)]
-                spacing: dp(18)
+                padding: [dp(16), dp(10), dp(16), dp(30)]
+                spacing: dp(16)
 
-                # ---------------- HERO: mensaje + insignias ----------------
-                DarkCard:
-
-                    MDBoxLayout:
-                        spacing: dp(14)
-                        adaptive_height: True
-
-                        MDBoxLayout:
-                            orientation: "vertical"
-                            spacing: dp(8)
-                            adaptive_height: True
-                            pos_hint: {"center_y": 0.5}
-
-                            MDLabel:
-                                text: "Cuida tus plantas,\n[color=8654e0]asegura tu cosecha[/color]"
-                                markup: True
-                                bold: True
-                                font_style: "H6"
-                                theme_text_color: "Custom"
-                                text_color: 1, 1, 1, 1
-                                adaptive_height: True
-
-                            MDLabel:
-                                text: "Toma o sube una foto y la IA analizara tu planta para darte un diagnostico preciso."
-                                theme_text_color: "Custom"
-                                text_color: 0.68, 0.66, 0.74, 1
-                                font_style: "Caption"
-                                adaptive_height: True
-
-                            MDBoxLayout:
-                                adaptive_size: True
-                                spacing: dp(14)
-
-                                DiagBadge:
-                                    icon: "shield-check-outline"
-                                    text: "Rapido"
-
-                                DiagBadge:
-                                    icon: "target"
-                                    text: "Confiable"
-
-                                DiagBadge:
-                                    icon: "leaf"
-                                    text: "Efectivo"
-
-                        FloatLayout:
-                            size_hint: None, None
-                            size: dp(104), dp(104)
-                            pos_hint: {"center_y": 0.5}
-
-                            canvas.before:
-                                Color:
-                                    rgba: 0.35, 0.22, 0.75, 0.3
-                                Ellipse:
-                                    pos: self.pos
-                                    size: self.size
-                                Color:
-                                    rgba: 0.55, 0.4, 0.95, 0.5
-                                Line:
-                                    width: 1.3
-                                    circle: (self.center_x, self.center_y, dp(50))
-                                Color:
-                                    rgba: 1, 1, 1, 0.85
-                                Line:
-                                    width: 1.5
-                                    points: [self.x, self.y+dp(16), self.x, self.y, self.x+dp(16), self.y]
-                                Line:
-                                    width: 1.5
-                                    points: [self.right-dp(16), self.y, self.right, self.y, self.right, self.y+dp(16)]
-                                Line:
-                                    width: 1.5
-                                    points: [self.right, self.top-dp(16), self.right, self.top, self.right-dp(16), self.top]
-                                Line:
-                                    width: 1.5
-                                    points: [self.x+dp(16), self.top, self.x, self.top, self.x, self.top-dp(16)]
-
-                            MDIcon:
-                                icon: "sprout"
-                                halign: "center"
-                                valign: "middle"
-                                theme_text_color: "Custom"
-                                text_color: 0.55, 0.85, 0.6, 1
-                                font_size: "44sp"
-                                pos_hint: {"center_x": 0.5, "center_y": 0.5}
-
-                # ---------------- PASO 1: FOTO ----------------
-                DarkCard:
-
+                # Paso 1: Foto
+                SectionCard3D:
                     MDBoxLayout:
                         adaptive_height: True
                         spacing: dp(10)
 
-                        FloatLayout:
-                            size_hint: None, None
-                            size: dp(46), dp(46)
-                            canvas.before:
-                                Color:
-                                    rgba: 0.42, 0.29, 0.86, 1
-                                Ellipse:
-                                    pos: self.pos
-                                    size: self.size
-
-                            MDIcon:
-                                icon: "camera-outline"
-                                halign: "center"
-                                valign: "middle"
-                                theme_text_color: "Custom"
-                                text_color: 1, 1, 1, 1
-                                font_size: "20sp"
-                                pos_hint: {"center_x": 0.5, "center_y": 0.5}
-
-                        MDBoxLayout:
-                            orientation: "vertical"
-                            adaptive_height: True
-                            spacing: dp(2)
-                            pos_hint: {"center_y": 0.5}
-
-                            MDLabel:
-                                text: "Fotografia la planta"
-                                bold: True
-                                theme_text_color: "Custom"
-                                text_color: 1, 1, 1, 1
-                                adaptive_height: True
-
-                            MDLabel:
-                                text: "Usa buena luz natural y enfoca la zona afectada."
-                                theme_text_color: "Custom"
-                                text_color: 0.6, 0.58, 0.65, 1
-                                font_style: "Caption"
-                                adaptive_height: True
-
-                        Image:
-                            source: "illustrations/magnifier_leaf.png"
-                            size_hint: None, None
-                            size: dp(44), dp(44)
-                            allow_stretch: True
-                            keep_ratio: True
+                        StepHeader:
+                            icon: "camera"
+                            title_text: "Paso 1: Foto de la Planta"
+                            subtitle_text: "Enfoca bien la hoja o fruto con daño"
 
                     FloatLayout:
                         size_hint_y: None
-                        height: dp(215)
+                        height: dp(200)
 
                         canvas.before:
                             Color:
-                                rgba: 0.07, 0.06, 0.11, 1
+                                rgba: 0.05, 0.07, 0.10, 1
                             RoundedRectangle:
                                 pos: self.pos
                                 size: self.size
-                                radius: [18,]
+                                radius: [16,]
                             Color:
-                                rgba: 0.4, 0.3, 0.8, 0.7
+                                rgba: 0.18, 0.75, 0.50, 0.4
                             Line:
-                                dash_length: 7
-                                dash_offset: 4
                                 width: 1.2
-                                rounded_rectangle:
-                                    [self.x + 1, self.y + 1, self.width - 2, self.height - 2, 18]
+                                rounded_rectangle: [self.x+1, self.y+1, self.width-2, self.height-2, 16]
 
                         Image:
                             id: preview_image
@@ -1101,139 +692,85 @@ RootLayout:
                             size_hint: None, None
                             size: dp(230), dp(78)
                             pos_hint: {"center_x": 0.5, "center_y": 0.5}
-                            spacing: dp(10)
+                            spacing: dp(8)
 
                             MDIcon:
-                                icon: "image-plus-outline"
+                                icon: "image-plus"
                                 halign: "center"
                                 theme_text_color: "Custom"
-                                text_color: 0.5, 0.48, 0.58, 1
+                                text_color: 0.40, 0.50, 0.60, 1
                                 font_size: "38sp"
 
                             MDLabel:
-                                text: "Aun no hay foto seleccionada"
+                                text: "Sin imagen seleccionada"
                                 halign: "center"
                                 theme_text_color: "Custom"
-                                text_color: 0.5, 0.48, 0.58, 1
+                                text_color: 0.60, 0.65, 0.70, 1
                                 font_style: "Caption"
                                 adaptive_height: True
-
-                        DiagIconBtn:
-                            icon: "close"
-                            size_hint: None, None
-                            size: dp(34), dp(34)
-                            opacity: 1 if preview_image.opacity > 0.5 else 0
-                            disabled: preview_image.opacity < 0.5
-                            pos_hint: {"right": 0.97, "top": 0.95}
-                            on_release: app.clear_photo()
 
                     MDBoxLayout:
                         adaptive_height: True
                         spacing: dp(12)
 
-                        DiagCaptureRow:
+                        MDRaisedButton:
+                            text: "Tomar Foto"
                             icon: "camera"
-                            title_text: "Tomar foto"
-                            subtitle_text: "Con camara"
-                            icon_bg: 0.42, 0.29, 0.86, 1
+                            size_hint_x: 0.5
+                            height: dp(46)
+                            md_bg_color: 0.10, 0.58, 0.38, 1
                             on_release: app.take_photo()
 
-                        DiagCaptureRow:
-                            icon: "image-multiple-outline"
-                            title_text: "Subir imagen"
-                            subtitle_text: "Desde galeria"
-                            icon_bg: 0.75, 0.25, 0.55, 1
+                        MDRaisedButton:
+                            text: "Galería"
+                            icon: "image"
+                            size_hint_x: 0.5
+                            height: dp(46)
+                            md_bg_color: 0.16, 0.26, 0.38, 1
                             on_release: app.choose_from_gallery()
 
-                    GradientButton:
+                    PillButton:
                         id: analyze_btn
-                        text: "ANALIZAR PLANTA"
+                        text: "ANALIZAR PLANTA CON IA"
                         disabled: True
-                        opacity: 0.45 if self.disabled else 1
                         on_release: app.analyze_photo()
 
-                    MDBoxLayout:
-                        adaptive_height: True
-                        spacing: dp(8)
+                    MDSpinner:
+                        id: analyze_spinner
+                        size_hint: None, None
+                        size: dp(26), dp(26)
+                        active: False
+                        opacity: 0
                         pos_hint: {"center_x": 0.5}
+                        color: 0.22, 0.88, 0.58, 1
 
-                        MDSpinner:
-                            id: analyze_spinner
-                            size_hint: None, None
-                            size: dp(22), dp(22)
-                            active: False
-                            opacity: 0
-                            color: 0.6, 0.4, 0.95, 1
-
-                    DiagCaptureRow:
-                        icon: "chip"
-                        title_text: "IA avanzada"
-                        subtitle_text: "Diagnosticos precisos con recomendaciones personalizadas."
-                        icon_bg: 0.75, 0.25, 0.55, 1
-
-                # ---------------- PASO 2: DIAGNÓSTICO ----------------
-                DarkCard:
+                # Paso 2: Diagnóstico Resultante
+                SectionCard3D:
                     id: result_card
                     opacity: 0
                     disabled: True
 
                     MDBoxLayout:
                         adaptive_height: True
-                        spacing: dp(10)
+                        spacing: dp(8)
 
                         StepHeader:
-                            icon: "clipboard-text-outline"
-                            title_text: "Diagnostico"
-                            subtitle_text: "Resultado generado por la IA a partir de tu foto."
+                            icon: "clipboard-pulse-outline"
+                            title_text: "Diagnóstico Completo"
+                            subtitle_text: "Tratamiento sugerido por la IA"
 
-                        MDBoxLayout:
-                            orientation: "vertical"
-                            adaptive_height: True
-                            size_hint_x: None
-                            width: dp(52)
-                            spacing: dp(2)
+                        RoundIconButton:
+                            id: speak_btn
+                            icon: "volume-high"
                             pos_hint: {"center_y": 0.5}
+                            on_release: app.speak_diagnosis(app.last_diagnosis)
 
-                            RoundIconButton:
-                                id: speak_btn
-                                icon: "stop-circle-outline" if app.speaking_lang == "es" else "volume-high"
-                                disabled: True
-                                pos_hint: {"center_x": 0.5}
-                                on_release: app.speak_diagnosis(app.last_diagnosis)
-
-                            MDLabel:
-                                text: "Espanol"
-                                font_style: "Caption"
-                                halign: "center"
-                                text_size: self.width, None
-                                adaptive_height: True
-                                theme_text_color: "Custom"
-                                text_color: 0.75, 0.75, 0.82, 1
-
-                        MDBoxLayout:
-                            orientation: "vertical"
-                            adaptive_height: True
-                            size_hint_x: None
-                            width: dp(52)
-                            spacing: dp(2)
+                        RoundIconButton:
+                            id: speak_qu_btn
+                            icon: "translate"
+                            bg_color: 0.85, 0.50, 0.15, 1
                             pos_hint: {"center_y": 0.5}
-
-                            RoundIconButton:
-                                id: speak_qu_btn
-                                icon: "stop-circle-outline" if app.speaking_lang == "qu" else "translate"
-                                bg_color: 0.85, 0.5, 0.1, 1
-                                disabled: True
-                                pos_hint: {"center_x": 0.5}
-                                on_release: app.speak_diagnosis_quechua(app.last_diagnosis)
-
-                            MDLabel:
-                                text: "Quechua"
-                                font_style: "Caption"
-                                halign: "center"
-                                text_size: self.width, None
-                                adaptive_height: True
-                                theme_text_color: "Custom"
-                                text_color: 0.95, 0.65, 0.25, 1
+                            on_release: app.speak_diagnosis_quechua(app.last_diagnosis)
 
                     MDBoxLayout:
                         id: result_body
@@ -1241,25 +778,173 @@ RootLayout:
                         adaptive_height: True
                         spacing: dp(10)
 
-                # ---------------- PASO 3: AYUDA CERCANA ----------------
-                DarkCard:
+                # Paso 3: Ayuda y Agroveterinarias Directas
+                SectionCard3D:
                     id: locator_card
                     opacity: 0
                     disabled: True
 
                     StepHeader:
-                        icon: "map-marker-radius-outline"
-                        title_text: "Ayuda cerca de ti"
-                        subtitle_text: "Viveros, tiendas de jardineria y agronomos que pueden ayudarte."
+                        icon: "storefront-outline"
+                        title_text: "Agroveterinarias y Tiendas"
+                        subtitle_text: "Consigue los productos recomendados"
+
+                    MDRaisedButton:
+                        text: "Ver Agroveterinarias (Llamar / WhatsApp)"
+                        icon: "store"
+                        size_hint_x: 1
+                        height: dp(46)
+                        md_bg_color: 0.10, 0.65, 0.45, 1
+                        on_release: app.go_agrovets()
 
                     MDBoxLayout:
                         id: locator_body
                         orientation: "vertical"
                         adaptive_height: True
-                        spacing: dp(10)
+                        spacing: dp(8)
 
 # ---------------------------------------------------------------------------
-# Pantalla HISTORIAL ("Diagnosticos")
+# Pantalla AGROVETERINARIAS (Directorio Público con Llamada y WhatsApp)
+# ---------------------------------------------------------------------------
+
+<AgroveterinariasScreen>:
+    name: "agrovets"
+
+    MDBoxLayout:
+        orientation: "vertical"
+        md_bg_color: 0.04, 0.05, 0.08, 1
+
+        MDTopAppBar:
+            title: "Agroveterinarias"
+            elevation: 0
+            md_bg_color: 0.04, 0.05, 0.08, 1
+            specific_text_color: 1, 1, 1, 1
+            left_action_items: [["arrow-left", lambda x: app.go_home()]]
+            right_action_items: [["map-marker-radius", lambda x: app.locate_nearby()]]
+
+        ScrollView:
+            do_scroll_x: False
+            MDBoxLayout:
+                orientation: "vertical"
+                adaptive_height: True
+                padding: [dp(16), dp(10), dp(16), dp(30)]
+                spacing: dp(14)
+
+                # Encabezado informativo
+                MDBoxLayout:
+                    adaptive_height: True
+                    padding: dp(14)
+                    canvas.before:
+                        Color:
+                            rgba: 0.08, 0.10, 0.14, 1
+                        RoundedRectangle:
+                            pos: self.pos
+                            size: self.size
+                            radius: [14,]
+
+                    MDIcon:
+                        icon: "information-outline"
+                        theme_text_color: "Custom"
+                        text_color: 0.22, 0.88, 0.58, 1
+                        size_hint_x: None
+                        width: dp(30)
+                        pos_hint: {"center_y": 0.5}
+
+                    MDLabel:
+                        text: "Contacta agroveterinarias para adquirir fungicidas, insecticidas y asesoría técnica."
+                        theme_text_color: "Custom"
+                        text_color: 0.85, 0.88, 0.92, 1
+                        font_style: "Caption"
+                        adaptive_height: True
+
+                # Lista de Agroveterinarias
+                MDBoxLayout:
+                    id: agrovets_list
+                    orientation: "vertical"
+                    adaptive_height: True
+                    spacing: dp(14)
+
+# ---------------------------------------------------------------------------
+# Pantalla PANEL ADMIN (Protegido con Código 673847)
+# ---------------------------------------------------------------------------
+
+<AdminScreen>:
+    name: "admin"
+
+    MDBoxLayout:
+        orientation: "vertical"
+        md_bg_color: 0.04, 0.05, 0.08, 1
+
+        MDTopAppBar:
+            title: "ADMIN--- Gestión"
+            elevation: 0
+            md_bg_color: 0.04, 0.05, 0.08, 1
+            specific_text_color: 1, 1, 1, 1
+            left_action_items: [["arrow-left", lambda x: app.go_more()]]
+
+        ScrollView:
+            do_scroll_x: False
+            MDBoxLayout:
+                orientation: "vertical"
+                adaptive_height: True
+                padding: [dp(16), dp(12), dp(16), dp(30)]
+                spacing: dp(16)
+
+                # Formulario para registrar nueva agroveterinaria
+                SectionCard3D:
+                    StepHeader:
+                        icon: "shield-account"
+                        title_text: "Registrar Agroveterinaria"
+                        subtitle_text: "Se guardará en la app y estará disponible a los agricultores"
+
+                    MDTextField:
+                        id: admin_input_nombre
+                        hint_text: "Nombre de la Agroveterinaria *"
+                        mode: "fill"
+
+                    MDTextField:
+                        id: admin_input_ciudad
+                        hint_text: "Ciudad / Ubicación / Dirección *"
+                        mode: "fill"
+
+                    MDTextField:
+                        id: admin_input_telefono
+                        hint_text: "Teléfono de Llamadas (Ej: 987654321) *"
+                        input_type: "tel"
+                        mode: "fill"
+
+                    MDTextField:
+                        id: admin_input_whatsapp
+                        hint_text: "Número de WhatsApp (Ej: 51987654321) *"
+                        input_type: "tel"
+                        mode: "fill"
+
+                    MDTextField:
+                        id: admin_input_notas
+                        hint_text: "Productos / Especialidad (Opcional)"
+                        mode: "fill"
+
+                    PillButton:
+                        text: "REGISTRAR AGROVETERINARIA"
+                        on_release: app.admin_save_agroveterinaria()
+
+                # Lista de Agroveterinarias registradas con opción de borrar
+                MDLabel:
+                    text: "Agroveterinarias Registradas"
+                    bold: True
+                    font_style: "H6"
+                    theme_text_color: "Custom"
+                    text_color: 1, 1, 1, 1
+                    adaptive_height: True
+
+                MDBoxLayout:
+                    id: admin_agrovets_list
+                    orientation: "vertical"
+                    adaptive_height: True
+                    spacing: dp(12)
+
+# ---------------------------------------------------------------------------
+# Pantalla HISTORIAL
 # ---------------------------------------------------------------------------
 
 <HistoryScreen>:
@@ -1267,12 +952,12 @@ RootLayout:
 
     MDBoxLayout:
         orientation: "vertical"
-        md_bg_color: 0.043, 0.035, 0.07, 1
+        md_bg_color: 0.04, 0.05, 0.08, 1
 
         MDTopAppBar:
-            title: "Mis diagnosticos"
+            title: "Historial de Diagnósticos"
             elevation: 0
-            md_bg_color: 0.043, 0.035, 0.07, 1
+            md_bg_color: 0.04, 0.05, 0.08, 1
             specific_text_color: 1, 1, 1, 1
             left_action_items: [["arrow-left", lambda x: app.go_home()]]
 
@@ -1281,8 +966,8 @@ RootLayout:
             MDBoxLayout:
                 orientation: "vertical"
                 adaptive_height: True
-                padding: [dp(16), dp(20), dp(16), dp(30)]
-                spacing: dp(16)
+                padding: [dp(16), dp(16), dp(16), dp(30)]
+                spacing: dp(14)
 
                 MDBoxLayout:
                     id: history_placeholder
@@ -1291,25 +976,19 @@ RootLayout:
                     spacing: dp(10)
                     padding: dp(20), dp(40)
 
-                    Image:
-                        source: "illustrations/robot_mascot.png"
-                        size_hint: None, None
-                        size: dp(140), dp(140)
-                        pos_hint: {"center_x": 0.5}
-                        allow_stretch: True
-                        keep_ratio: True
+                    MDIcon:
+                        icon: "clipboard-text-clock-outline"
+                        font_size: "54sp"
+                        halign: "center"
+                        theme_text_color: "Custom"
+                        text_color: 0.35, 0.45, 0.55, 1
 
                     MDLabel:
-                        text: "Aun no tienes diagnosticos"
+                        text: "Aún no tienes diagnósticos guardados"
                         halign: "center"
                         bold: True
-                        adaptive_height: True
-
-                    MDLabel:
-                        text: "Cuando analices una planta, el resultado aparecera aqui."
-                        halign: "center"
-                        theme_text_color: "Secondary"
-                        font_style: "Caption"
+                        theme_text_color: "Custom"
+                        text_color: 1, 1, 1, 1
                         adaptive_height: True
 
                 MDBoxLayout:
@@ -1317,8 +996,6 @@ RootLayout:
                     orientation: "vertical"
                     adaptive_height: True
                     spacing: dp(10)
-                    opacity: 0
-                    disabled: True
 
 # ---------------------------------------------------------------------------
 # Pantalla CONSEJOS
@@ -1329,12 +1006,12 @@ RootLayout:
 
     MDBoxLayout:
         orientation: "vertical"
-        md_bg_color: 0.043, 0.035, 0.07, 1
+        md_bg_color: 0.04, 0.05, 0.08, 1
 
         MDTopAppBar:
-            title: "Consejos"
+            title: "Consejos Agrícolas"
             elevation: 0
-            md_bg_color: 0.043, 0.035, 0.07, 1
+            md_bg_color: 0.04, 0.05, 0.08, 1
             specific_text_color: 1, 1, 1, 1
             left_action_items: [["arrow-left", lambda x: app.go_home()]]
 
@@ -1343,36 +1020,26 @@ RootLayout:
             MDBoxLayout:
                 orientation: "vertical"
                 adaptive_height: True
-                padding: [dp(16), dp(20), dp(16), dp(30)]
+                padding: [dp(16), dp(16), dp(16), dp(30)]
                 spacing: dp(14)
 
                 SimpleTip:
-                    icon: "leaf"
-                    title_text: "Revisa el enves de las hojas"
-                    body_text: "Muchas plagas se esconden ahi y pasan desapercibidas si solo miras la superficie."
+                    icon: "water-outline"
+                    title_text: "Riego al amanecer"
+                    body_text: "Riega temprano para que el sol evite la humedad prolongada en hojas, reduciendo hongos."
 
                 SimpleTip:
-                    icon: "weather-sunny"
-                    title_text: "Riega temprano en la manana"
-                    body_text: "Evita que el agua se quede en las hojas durante la noche, eso favorece los hongos."
+                    icon: "rotate-right"
+                    title_text: "Rotación de cultivos"
+                    body_text: "Cambia la familia de plantas cada temporada para romper el ciclo biológico de plagas en la tierra."
 
                 SimpleTip:
-                    icon: "sprout-outline"
-                    title_text: "Rota tus cultivos cada temporada"
-                    body_text: "Ayuda a cortar el ciclo de plagas y enfermedades que quedan en el suelo."
-
-                SimpleTip:
-                    icon: "shield-check-outline"
-                    title_text: "Prefiere el control biologico"
-                    body_text: "Antes de usar quimicos fuertes, prueba metodos naturales o insectos beneficos."
-
-                SimpleTip:
-                    icon: "content-cut"
-                    title_text: "Desinfecta tus herramientas de poda"
-                    body_text: "Evita pasar enfermedades de una planta a otra al cortar ramas u hojas."
+                    icon: "flask-outline"
+                    title_text: "Calibración de mochilas fumigadoras"
+                    body_text: "Usa la dosis exacta indicada por tu agroveterinaria de confianza para evitar fitotoxicidad."
 
 # ---------------------------------------------------------------------------
-# Pantalla MAS (ajustes, idioma, acerca de, ayuda)
+# Pantalla MÁS (con la opción ADMIN--- destacada)
 # ---------------------------------------------------------------------------
 
 <MoreScreen>:
@@ -1380,12 +1047,12 @@ RootLayout:
 
     MDBoxLayout:
         orientation: "vertical"
-        md_bg_color: 0.043, 0.035, 0.07, 1
+        md_bg_color: 0.04, 0.05, 0.08, 1
 
         MDTopAppBar:
-            title: "Mas opciones"
+            title: "Más Opciones"
             elevation: 0
-            md_bg_color: 0.043, 0.035, 0.07, 1
+            md_bg_color: 0.04, 0.05, 0.08, 1
             specific_text_color: 1, 1, 1, 1
             left_action_items: [["arrow-left", lambda x: app.go_home()]]
 
@@ -1394,25 +1061,42 @@ RootLayout:
             MDBoxLayout:
                 orientation: "vertical"
                 adaptive_height: True
-                padding: [dp(8), dp(16), dp(8), dp(30)]
-                spacing: dp(4)
+                padding: [dp(16), dp(16), dp(16), dp(30)]
+                spacing: dp(12)
+
+                # Opción ADMIN--- requerida por el usuario
+                MDBoxLayout:
+                    adaptive_height: True
+                    padding: dp(2)
+                    canvas.before:
+                        Color:
+                            rgba: 0.85, 0.25, 0.35, 1
+                        RoundedRectangle:
+                            pos: self.pos
+                            size: self.size
+                            radius: [15,]
+
+                    MoreListItem:
+                        icon: "shield-lock"
+                        text: "ADMIN--- (Acceso con Código)"
+                        on_release: app.prompt_admin_code()
+
+                MoreListItem:
+                    icon: "store"
+                    text: "Directorio de Agroveterinarias"
+                    on_release: app.go_agrovets()
 
                 MoreListItem:
                     icon: "notebook-outline"
-                    text: "Mi bitacora agricola"
+                    text: "Mi Bitácora Agrícola"
                     on_release: app.open_bitacora_dialog()
 
                 MoreListItem:
-                    icon: "translate"
-                    text: "Idioma (Espanol / Quechua)"
-                    on_release: app.show_language_options()
+                    icon: "lightbulb-outline"
+                    text: "Consejos y Buenas Prácticas"
+                    on_release: app.go_tips()
 
                 MoreListItem:
                     icon: "information-outline"
                     text: "Acerca de Agrowillay"
                     on_release: app.show_about_dialog()
-
-                MoreListItem:
-                    icon: "help-circle-outline"
-                    text: "Ayuda"
-                    on_release: app.show_help_dialog()
