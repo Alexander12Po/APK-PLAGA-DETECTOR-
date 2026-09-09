@@ -79,8 +79,8 @@ CAMERA_REQUEST_CODE = 1888
 # Código de acceso ADMIN solicitado
 ADMIN_PIN_CODE = "673847"
 
-GEMINI_MODEL = "gemini-2.5-flash"
-GEMINI_MODEL_FALLBACK = "gemini-1.5-flash"
+GEMINI_MODEL = "gemini-3.7-flash"
+GEMINI_MODEL_FALLBACK = "gemini-3.6-flash"
 GEMINI_TTS_MODEL = "gemini-2.5-flash-preview-tts"
 GEMINI_ENDPOINT = (
     "https://generativelanguage.googleapis.com/v1beta/models/"
