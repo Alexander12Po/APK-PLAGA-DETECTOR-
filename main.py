@@ -34,6 +34,9 @@ from kivymd.uix.dialog import MDDialog
 from kivymd.uix.label import MDLabel
 from kivymd.uix.textfield import MDTextField
 
+# VERSIÓN REQUERIDA POR GITHUB ACTIONS PARA COMPILAR EL APK:
+APP_VERSION = "1.3.0"
+
 # ---------------------------------------------------------------------------
 # Permisos y Rutas Android
 # ---------------------------------------------------------------------------
@@ -73,7 +76,7 @@ ADMIN_PIN_CODE = "673847"
 # Número de WhatsApp para confirmar pagos de Yape
 NUMERO_WHATSAPP_ADMIN = "51984123456"
 
-GEMINI_MODEL = "gemini-3.7-flash"
+GEMINI_MODEL = "gemini-2.5-flash"
 GEMINI_ENDPOINT = (
     "https://generativelanguage.googleapis.com/v1beta/models/"
     "{model}:generateContent?key={key}"
@@ -149,6 +152,54 @@ class BalanceManager:
 
 
 # ---------------------------------------------------------------------------
+# Gestor de Agroveterinarias
+# ---------------------------------------------------------------------------
+
+
+class AgroveterinariaManager:
+    DEFAULT_AGROVETS = [
+        {
+            "id": "1",
+            "nombre": "Agroveterinaria El Campo",
+            "ciudad": "Curahuasi / Centro",
+            "telefono": "984123456",
+            "whatsapp": "51984123456",
+        },
+        {
+            "id": "2",
+            "nombre": "Agroinsumos Apurímac",
+            "ciudad": "Abancay - Av. Arenas",
+            "telefono": "983654321",
+            "whatsapp": "51983654321",
+        },
+    ]
+
+    @classmethod
+    def load(cls) -> list:
+        if AGROVETS_FILE.exists():
+            try:
+                return json.loads(AGROVETS_FILE.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+        return cls.DEFAULT_AGROVETS
+
+    @classmethod
+    def add(cls, nom, ciu, tel, wsp):
+        lista = cls.load()
+        lista.insert(
+            0,
+            {
+                "id": str(int(time.time())),
+                "nombre": nom,
+                "ciudad": ciu,
+                "telefono": tel,
+                "whatsapp": wsp,
+            },
+        )
+        AGROVETS_FILE.write_text(json.dumps(lista, indent=2), encoding="utf-8")
+
+
+# ---------------------------------------------------------------------------
 # Pantallas
 # ---------------------------------------------------------------------------
 
@@ -214,7 +265,6 @@ class AgrowillayApp(MDApp):
         return Builder.load_file(kv_path)
 
     def on_start(self):
-        # Actualizar visualmente el saldo de consultas
         self.update_balance_ui()
         Clock.schedule_once(lambda dt: self.check_weather_alerts(), 1.0)
         Clock.schedule_once(lambda dt: self.refresh_agrovets_ui(), 0.5)
@@ -297,7 +347,6 @@ class AgrowillayApp(MDApp):
         self._go("yape_pago", "recargas")
 
     def notificar_pago_whatsapp(self):
-        """Abre WhatsApp con mensaje predeterminado para confirmar el Yape."""
         msg = f"Hola, acabo de yapear para el paquete {self.selected_pack_title} ({self.selected_pack_price}) en Agrowillay. Adjunto mi comprobante para la recarga."
         url = f"https://wa.me/{NUMERO_WHATSAPP_ADMIN}?text={msg.replace(' ', '%20')}"
         self._open_url(url)
@@ -345,12 +394,10 @@ class AgrowillayApp(MDApp):
             toast("Primero toma o selecciona una foto")
             return
 
-        # Comprobar si tiene consultas
         if not BalanceManager.can_analyze():
             self._show_no_credits_dialog()
             return
 
-        # Descontar una consulta
         restantes = BalanceManager.consume_one()
         self.update_balance_ui()
 
@@ -365,7 +412,6 @@ class AgrowillayApp(MDApp):
         ).start()
 
     def _show_no_credits_dialog(self):
-        """Mensaje fácil de entender para agricultores cuando se agotan las 10 consultas."""
         dialog = MDDialog(
             title="Tus 10 consultas gratis se completaron",
             text=(
@@ -415,7 +461,6 @@ class AgrowillayApp(MDApp):
             diag = json.loads(txt)
             Clock.schedule_once(lambda dt: self._on_diag_success(diag))
         except Exception:
-            # Diagnóstico de demostración si no hay red
             diag_demo = {
                 "planta_identificada": "Papa / Hortaliza",
                 "plaga_o_problema": "Rancha o Tizón Tardío",
