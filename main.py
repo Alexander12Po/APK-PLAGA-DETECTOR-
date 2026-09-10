@@ -73,7 +73,7 @@ ADMIN_PIN_CODE = "673847"
 # Número de WhatsApp para confirmar pagos de Yape
 NUMERO_WHATSAPP_ADMIN = "51984123456"
 
-GEMINI_MODEL = "gemini-2.5-flash"
+GEMINI_MODEL = "gemini-3.7-flash"
 GEMINI_ENDPOINT = (
     "https://generativelanguage.googleapis.com/v1beta/models/"
     "{model}:generateContent?key={key}"
