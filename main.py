@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """
 Agrowillay — App móvil (Kivy + KivyMD)
-Diagnóstico de plagas con IA, Clima Satelital, Agroveterinarias,
-10 Consultas Gratis, Pasarela de Recarga con Yape QR y Panel ADMIN (PIN: 673847).
+Diagnóstico de plagas con IA, Clima y Directorio de Agroveterinarias
+Con Panel ADMIN protegido por PIN (673847).
 """
 
 import base64
@@ -12,15 +12,17 @@ import shutil
 import threading
 import time
 import traceback
+import wave
 import webbrowser
 from pathlib import Path
 
 from kivy.animation import Animation
 from kivy.base import ExceptionHandler, ExceptionManager
 from kivy.clock import Clock, mainthread
+from kivy.factory import Factory
 from kivy.lang import Builder
 from kivy.metrics import dp
-from kivy.properties import BooleanProperty, ListProperty, NumericProperty, ObjectProperty, StringProperty
+from kivy.properties import ListProperty, ObjectProperty, StringProperty
 from kivy.uix.behaviors import ButtonBehavior
 from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.screenmanager import Screen
@@ -34,9 +36,6 @@ from kivymd.uix.card import MDCard
 from kivymd.uix.dialog import MDDialog
 from kivymd.uix.label import MDLabel
 from kivymd.uix.textfield import MDTextField
-
-# VERSIÓN OBLIGATORIA PARA LA LECTURA DE GITHUB ACTIONS:
-APP_VERSION = "1.3.0"
 
 # ---------------------------------------------------------------------------
 # Permisos y Rutas Android
@@ -52,13 +51,6 @@ if platform == "android":
         Permission.ACCESS_COARSE_LOCATION,
     ]
     try:
-        from android.permissions import Permission as P
-        if hasattr(P, "POST_NOTIFICATIONS"):
-            _permisos.append(P.POST_NOTIFICATIONS)
-    except Exception:
-        pass
-
-    try:
         _permisos.append(Permission.WRITE_EXTERNAL_STORAGE)
         _permisos.append(Permission.READ_EXTERNAL_STORAGE)
     except AttributeError:
@@ -70,226 +62,77 @@ if platform == "android":
 
     request_permissions(_permisos)
     from android.storage import app_storage_path
+
     APP_DATA_DIR = Path(app_storage_path())
 else:
     APP_DATA_DIR = Path(os.path.expanduser("~/.agrowillay_app"))
 
 APP_DATA_DIR.mkdir(parents=True, exist_ok=True)
-BALANCE_FILE = APP_DATA_DIR / "saldo_consultas.json"
+CONFIG_FILE = APP_DATA_DIR / "config.json"
+BITACORA_FILE = APP_DATA_DIR / "bitacora.json"
 HISTORY_FILE = APP_DATA_DIR / "historial.json"
 AGROVETS_FILE = APP_DATA_DIR / "agroveterinarias.json"
-CONFIG_FILE = APP_DATA_DIR / "config.json"
 HISTORY_PHOTOS_DIR = APP_DATA_DIR / "historial_fotos"
 CAMERA_PHOTO_PATH = str(APP_DATA_DIR / "captura_temp.jpg")
 CAMERA_REQUEST_CODE = 1888
 
+# Código de acceso ADMIN solicitado
 ADMIN_PIN_CODE = "673847"
-NUMERO_WHATSAPP_ADMIN = "51984123456"
 
 GEMINI_MODEL = "gemini-2.5-flash"
 GEMINI_MODEL_FALLBACK = "gemini-1.5-flash"
+GEMINI_TTS_MODEL = "gemini-2.5-flash-preview-tts"
 GEMINI_ENDPOINT = (
     "https://generativelanguage.googleapis.com/v1beta/models/"
     "{model}:generateContent?key={key}"
 )
 
 DEFAULT_GEMINI_API_KEY = "AQ.Ab8RN6JUSmY_mCwVu6L7n2oa05nwvxsf8NbHKdFWd_Tkbo-n0Q"
+APP_VERSION = "1.1.0"
+GITHUB_REPO = "Alexander12Po/APK-PLAGA-DETECTOR-"
 
-DIAGNOSIS_PROMPT = """Eres un ingeniero agrónomo experto en fitosanidad y control de plagas agrícolas en el Perú.
+DIAGNOSIS_PROMPT = """Eres un ingeniero agrónomo experto en fitosanidad y control de plagas.
 Observa la foto de la planta y responde ÚNICAMENTE con un objeto JSON válido,
 sin texto adicional, sin explicaciones, sin markdown. Usa exactamente esta forma:
 
 {
   "planta_identificada": "nombre común de la planta si es identificable, o 'planta no identificada'",
-  "plaga_o_problema": "nombre de la plaga, enfermedad o hongo detectado",
+  "plaga_o_problema": "nombre de la plaga, enfermedad o problema detectado",
   "severidad": "alta" | "media" | "baja",
   "confianza": "breve frase sobre qué tan clara es la evidencia visual en la foto",
   "sintomas_observados": ["síntoma 1", "síntoma 2"],
-  "pasos": ["paso 1 de tratamiento", "paso 2", "paso 3"],
-  "productos_recomendados": ["insumo con ingrediente activo comercial de agroveterinaria", "otro producto"],
+  "pasos": ["paso 1 de tratamiento", "paso 2", "paso 3", "paso 4 opcional"],
+  "productos_recomendados": ["producto comercial (ej. fungicida a base de cobre)", "insecticida específico"],
   "remedios_caseros": ["remedio orgánico o casero 1", "remedio 2"],
-  "prevencion": "recomendación breve de prevención agrícola",
-  "urgencia": "nivel de urgencia en una frase"
+  "prevencion": "una recomendación breve para evitar que vuelva a ocurrir",
+  "urgencia": "urgencia en una frase"
 }
 Escribe todos los textos en español."""
 
-# Códigos activos para canje directo
-CODIGOS_VALIDOS = {
-    "AGRO-PRO": {"tipo": "ilimitado", "dias": 30},
-    "AGRO-100": {"tipo": "creditos", "cantidad": 100},
-    "AGRO-50": {"tipo": "creditos", "cantidad": 50},
+COLORS = {
+    "green_700": "#0A5038",
+    "green_600": "#10805B",
+    "green_500": "#19B382",
+    "green_50": "#E9F8F2",
+    "red_600": "#E03838",
+    "amber_600": "#D98218",
 }
 
-# ---------------------------------------------------------------------------
-# Gestor de Notificaciones Android
-# ---------------------------------------------------------------------------
 
-class NotificationService:
-    @classmethod
-    def notify(cls, title: str, message: str):
-        if platform == "android":
-            try:
-                from android import mActivity
-                from jnius import autoclass
-                Context = autoclass("android.content.Context")
-                NotificationManager = autoclass("android.app.NotificationManager")
-                NotificationChannel = autoclass("android.app.NotificationChannel")
-                NotificationCompat = autoclass("androidx.core.app.NotificationCompat$Builder")
+def hex_to_rgba(hex_color, alpha=1):
+    hex_color = hex_color.lstrip("#")
+    r, g, b = (int(hex_color[i : i + 2], 16) / 255 for i in (0, 2, 4))
+    return [r, g, b, alpha]
 
-                channel_id = "agrowillay_alertas"
-                channel_name = "Alertas Fitosanitarias Agrowillay"
-                importance = NotificationManager.IMPORTANCE_HIGH
-                nm = mActivity.getSystemService(Context.NOTIFICATION_SERVICE)
-
-                try:
-                    channel = NotificationChannel(channel_id, channel_name, importance)
-                    channel.setDescription("Notificaciones sobre cultivos en riesgo")
-                    nm.createNotificationChannel(channel)
-                except Exception:
-                    pass
-
-                icon_id = mActivity.getApplicationInfo().icon
-                builder = NotificationCompat(mActivity, channel_id)
-                builder.setContentTitle(title)
-                builder.setContentText(message)
-                builder.setStyle(autoclass("androidx.core.app.NotificationCompat$BigTextStyle")().bigText(message))
-                builder.setSmallIcon(icon_id)
-                builder.setAutoCancel(True)
-                nm.notify(int(time.time()) % 100000, builder.build())
-                return
-            except Exception:
-                _write_crash_log(traceback.format_exc())
-
-        toast(f"🔔 [NOTIFICACIÓN]: {title} - {message}")
 
 # ---------------------------------------------------------------------------
-# Gestor de Consultas (10 Gratis de Bienvenida)
+# Gestor de Agroveterinarias (Persistencia JSON + Precarga)
 # ---------------------------------------------------------------------------
 
-class BalanceManager:
-    @classmethod
-    def load(cls) -> dict:
-        if BALANCE_FILE.exists():
-            try:
-                return json.loads(BALANCE_FILE.read_text(encoding="utf-8"))
-            except Exception:
-                pass
-        inicial = {
-            "consultas_gratis": 10,
-            "es_ilimitado": False,
-            "expira_ilimitado": 0,
-        }
-        cls.save(inicial)
-        return inicial
-
-    @classmethod
-    def save(cls, data: dict):
-        try:
-            BALANCE_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-        except Exception:
-            pass
-
-    @classmethod
-    def can_analyze(cls) -> bool:
-        data = cls.load()
-        if data.get("es_ilimitado") and data.get("expira_ilimitado", 0) > time.time():
-            return True
-        return data.get("consultas_gratis", 0) > 0
-
-    @classmethod
-    def consume_one(cls) -> int:
-        data = cls.load()
-        if data.get("es_ilimitado") and data.get("expira_ilimitado", 0) > time.time():
-            return 999
-        restantes = max(0, data.get("consultas_gratis", 0) - 1)
-        data["consultas_gratis"] = restantes
-        cls.save(data)
-        return restantes
-
-    @classmethod
-    def add_credits(cls, cantidad: int):
-        data = cls.load()
-        if cantidad == -1:
-            data["es_ilimitado"] = True
-            data["expira_ilimitado"] = time.time() + (30 * 86400)
-        else:
-            data["consultas_gratis"] = data.get("consultas_gratis", 0) + cantidad
-        cls.save(data)
-        return data
-
-# ---------------------------------------------------------------------------
-# Gestor de Historial con Estado de Recuperación
-# ---------------------------------------------------------------------------
-
-class HistoryManager:
-    MAX_ENTRADAS = 30
-
-    @staticmethod
-    def load() -> list:
-        if HISTORY_FILE.exists():
-            try:
-                return json.loads(HISTORY_FILE.read_text(encoding="utf-8"))
-            except Exception:
-                pass
-        return []
-
-    @classmethod
-    def add(cls, diagnosis, foto_origen) -> dict:
-        try:
-            HISTORY_PHOTOS_DIR.mkdir(parents=True, exist_ok=True)
-            entradas = cls.load()
-            foto_guardada = ""
-            if foto_origen and os.path.exists(foto_origen):
-                nombre = f"{int(time.time() * 1000)}.jpg"
-                destino = HISTORY_PHOTOS_DIR / nombre
-                shutil.copy(foto_origen, destino)
-                foto_guardada = str(destino)
-
-            severidad = str(diagnosis.get("severidad", "baja")).lower()
-            alerta_activa = severidad in ["alta", "media"]
-
-            item_id = str(int(time.time() * 1000))
-            nuevo = {
-                "id": item_id,
-                "fecha": time.strftime("%d/%m/%Y %H:%M"),
-                "foto": foto_guardada,
-                "diagnosis": diagnosis,
-                "recuperada": False,
-                "alerta_activa": alerta_activa
-            }
-            entradas.insert(0, nuevo)
-            cls._save(entradas[:cls.MAX_ENTRADAS])
-            return nuevo
-        except Exception:
-            _write_crash_log(traceback.format_exc())
-            return {}
-
-    @classmethod
-    def mark_as_healthy(cls, item_id: str):
-        entradas = cls.load()
-        for it in entradas:
-            if it.get("id") == item_id:
-                it["recuperada"] = True
-                it["alerta_activa"] = False
-                break
-        cls._save(entradas)
-
-    @classmethod
-    def get_pending_alerts(cls) -> list:
-        return [x for x in cls.load() if x.get("alerta_activa") and not x.get("recuperada")]
-
-    @classmethod
-    def _save(cls, entradas: list):
-        try:
-            HISTORY_FILE.write_text(json.dumps(entradas, ensure_ascii=False, indent=2), encoding="utf-8")
-        except Exception:
-            _write_crash_log(traceback.format_exc())
-
-# ---------------------------------------------------------------------------
-# Gestor de Agroveterinarias
-# ---------------------------------------------------------------------------
 
 class AgroveterinariaManager:
+    """Gestiona el registro local de agroveterinarias."""
+
     DEFAULT_AGROVETS = [
         {
             "id": "1",
@@ -297,7 +140,7 @@ class AgroveterinariaManager:
             "ciudad": "Curahuasi / Centro",
             "telefono": "984123456",
             "whatsapp": "51984123456",
-            "notas": "Fungicidas, insecticidas, abonos foliares y semillas certificadas."
+            "notas": "Fungicidas, insecticidas, fertilizantes foliares y semillas.",
         },
         {
             "id": "2",
@@ -305,16 +148,16 @@ class AgroveterinariaManager:
             "ciudad": "Abancay - Av. Arenas",
             "telefono": "983654321",
             "whatsapp": "51983654321",
-            "notas": "Control de plagas, mochilas fumigadoras y asesoría técnica."
+            "notas": "Control fitosanitario, bombas de mochila y abono orgánico.",
         },
         {
             "id": "3",
-            "nombre": "San Isidro Veterinaria y Agronomía",
+            "nombre": "Veterinaria y Agronomía San Isidro",
             "ciudad": "Curahuasi",
             "telefono": "972112233",
             "whatsapp": "51972112233",
-            "notas": "Productos biológicos, fertilizantes y medicinas veterinarias."
-        }
+            "notas": "Asesoría técnica agrícola y salud animal.",
+        },
     ]
 
     @classmethod
@@ -332,7 +175,9 @@ class AgroveterinariaManager:
     @classmethod
     def save_all(cls, lista: list):
         try:
-            AGROVETS_FILE.write_text(json.dumps(lista, ensure_ascii=False, indent=2), encoding="utf-8")
+            AGROVETS_FILE.write_text(
+                json.dumps(lista, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
         except Exception:
             _write_crash_log(traceback.format_exc())
 
@@ -345,7 +190,7 @@ class AgroveterinariaManager:
             "ciudad": ciudad.strip(),
             "telefono": telefono.strip(),
             "whatsapp": whatsapp.strip().replace("+", "").replace(" ", ""),
-            "notas": notas.strip()
+            "notas": notas.strip(),
         }
         lista.insert(0, nuevo)
         cls.save_all(lista)
@@ -356,15 +201,100 @@ class AgroveterinariaManager:
         lista = [x for x in cls.load() if str(x.get("id")) != str(item_id)]
         cls.save_all(lista)
 
+
 # ---------------------------------------------------------------------------
-# Clientes Clima y Gemini IA
+# Otros Gestores
 # ---------------------------------------------------------------------------
+
+
+class ConfigManager:
+    @staticmethod
+    def load_api_key() -> str:
+        if CONFIG_FILE.exists():
+            try:
+                data = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+                saved = data.get("gemini_api_key", "")
+                if saved:
+                    return saved
+            except Exception:
+                pass
+        return DEFAULT_GEMINI_API_KEY
+
+
+class BitacoraManager:
+    @staticmethod
+    def load() -> dict:
+        if BITACORA_FILE.exists():
+            try:
+                return json.loads(BITACORA_FILE.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+        return {}
+
+    @staticmethod
+    def save(cultivo="", variedad="", fecha_siembra="", superficie=""):
+        BITACORA_FILE.write_text(
+            json.dumps(
+                {
+                    "cultivo": cultivo.strip(),
+                    "variedad": variedad.strip(),
+                    "fecha_siembra": fecha_siembra.strip(),
+                    "superficie": superficie.strip(),
+                }
+            ),
+            encoding="utf-8",
+        )
+
+
+class HistoryManager:
+    MAX_ENTRADAS = 30
+
+    @staticmethod
+    def load() -> list:
+        if HISTORY_FILE.exists():
+            try:
+                return json.loads(HISTORY_FILE.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+        return []
+
+    @classmethod
+    def add(cls, diagnosis, foto_origen) -> None:
+        try:
+            HISTORY_PHOTOS_DIR.mkdir(parents=True, exist_ok=True)
+            entradas = cls.load()
+            foto_guardada = ""
+            if foto_origen and os.path.exists(foto_origen):
+                nombre = f"{int(time.time() * 1000)}.jpg"
+                destino = HISTORY_PHOTOS_DIR / nombre
+                shutil.copy(foto_origen, destino)
+                foto_guardada = str(destino)
+
+            entradas.insert(
+                0,
+                {
+                    "fecha": time.strftime("%d/%m/%Y %H:%M"),
+                    "foto": foto_guardada,
+                    "diagnosis": diagnosis,
+                },
+            )
+            HISTORY_FILE.write_text(
+                json.dumps(entradas[: cls.MAX_ENTRADAS]), encoding="utf-8"
+            )
+        except Exception:
+            _write_crash_log(traceback.format_exc())
+
+
+# ---------------------------------------------------------------------------
+# Clima con Open-Meteo
+# ---------------------------------------------------------------------------
+
 
 class WeatherClient:
     ENDPOINT = (
         "https://api.open-meteo.com/v1/forecast"
         "?latitude={lat}&longitude={lon}"
-        "&current=temperature_2m,relative_humidity_2m,wind_speed_10m"
+        "&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m"
         "&daily=temperature_2m_min,temperature_2m_max,precipitation_probability_max,wind_speed_10m_max,relative_humidity_2m_mean"
         "&timezone=auto&forecast_days=3"
     )
@@ -372,14 +302,74 @@ class WeatherClient:
     @classmethod
     def get_forecast(cls, lat, lon):
         import requests
+
         url = cls.ENDPOINT.format(lat=lat, lon=lon)
         resp = requests.get(url, timeout=20)
         resp.raise_for_status()
         data = resp.json()
-        return {
-            "current": data.get("current", {}),
-            "dias": data.get("daily", {})
-        }
+        current = data.get("current", {})
+        daily = data.get("daily", {})
+        fechas = daily.get("time", [])
+
+        dias = []
+        for i in range(len(fechas)):
+            dias.append(
+                {
+                    "fecha": fechas[i],
+                    "temp_min": (daily.get("temperature_2m_min") or [None])[i],
+                    "temp_max": (daily.get("temperature_2m_max") or [None])[i],
+                    "prob_lluvia": (
+                        daily.get("precipitation_probability_max") or [0]
+                    )[i],
+                    "viento_max": (daily.get("wind_speed_10m_max") or [0])[i],
+                    "humedad": (daily.get("relative_humidity_2m_mean") or [0])[i],
+                }
+            )
+        return {"current": current, "dias": dias}
+
+
+def evaluar_riesgo_climatico(dias):
+    riesgos = []
+    for dia in dias:
+        temp_min = dia.get("temp_min")
+        prob_lluvia = dia.get("prob_lluvia") or 0
+        viento = dia.get("viento_max") or 0
+        humedad = dia.get("humedad") or 0
+
+        if temp_min is not None and temp_min <= 2:
+            riesgos.append(
+                {
+                    "fecha": dia["fecha"],
+                    "tipo": "Alerta de Helada",
+                    "nivel": "alta" if temp_min <= 0 else "media",
+                    "detalle": f"Temperatura mínima esperada de {temp_min}°C.",
+                }
+            )
+        if prob_lluvia >= 70 and viento >= 30:
+            riesgos.append(
+                {
+                    "fecha": dia["fecha"],
+                    "tipo": "Lluvias y Vientos Fuertes",
+                    "nivel": "media",
+                    "detalle": f"{prob_lluvia}% lluvia con ráfagas de {viento} km/h.",
+                }
+            )
+        if humedad >= 80 and temp_min is not None and temp_min >= 10:
+            riesgos.append(
+                {
+                    "fecha": dia["fecha"],
+                    "tipo": "Alto Riesgo de Hongos / Plagas",
+                    "nivel": "media",
+                    "detalle": f"Humedad de {humedad}%. Monitorea roya, rancha o mildiu.",
+                }
+            )
+    return riesgos
+
+
+# ---------------------------------------------------------------------------
+# Cliente Gemini IA
+# ---------------------------------------------------------------------------
+
 
 class GeminiClient:
     class GeminiError(Exception):
@@ -390,12 +380,13 @@ class GeminiClient:
         cleaned = text.strip().replace("```json", "").replace("```", "").strip()
         start, end = cleaned.find("{"), cleaned.rfind("}")
         if start == -1 or end == -1 or end < start:
-            raise GeminiClient.GeminiError("Respuesta sin formato JSON válido.")
-        return json.loads(cleaned[start:end+1])
+            raise GeminiClient.GeminiError("Respuesta de IA sin JSON válido.")
+        return json.loads(cleaned[start : end + 1])
 
     @classmethod
     def analyze_image(cls, image_path: str, api_key: str) -> dict:
         import requests
+
         with open(image_path, "rb") as f:
             image_bytes = f.read()
         image_b64 = base64.b64encode(image_bytes).decode("ascii")
@@ -411,19 +402,19 @@ class GeminiClient:
                 {
                     "parts": [
                         {"text": DIAGNOSIS_PROMPT},
-                        {"inline_data": {"mime_type": mime, "data": image_b64}}
+                        {"inline_data": {"mime_type": mime, "data": image_b64}},
                     ]
                 }
             ],
             "generationConfig": {
                 "response_mime_type": "application/json",
-                "max_output_tokens": 2048
-            }
+                "max_output_tokens": 2048,
+            },
         }
 
         urls = [
             GEMINI_ENDPOINT.format(model=GEMINI_MODEL, key=api_key),
-            GEMINI_ENDPOINT.format(model=GEMINI_MODEL_FALLBACK, key=api_key)
+            GEMINI_ENDPOINT.format(model=GEMINI_MODEL_FALLBACK, key=api_key),
         ]
 
         resp = None
@@ -436,104 +427,86 @@ class GeminiClient:
                 continue
 
         if not resp or resp.status_code != 200:
-            raise cls.GeminiError(f"Error de conexión con la IA ({getattr(resp, 'status_code', 'Red')}).")
+            raise cls.GeminiError(
+                f"Error al conectar con la IA ({getattr(resp, 'status_code', 'Red')}). Revisa internet."
+            )
 
-        txt = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
-        return cls._extract_json(txt)
+        data = resp.json()
+        try:
+            txt = data["candidates"][0]["content"]["parts"][0]["text"]
+            return cls._extract_json(txt)
+        except Exception as exc:
+            raise cls.GeminiError("Formato de respuesta no procesable.") from exc
+
 
 # ---------------------------------------------------------------------------
-# Clases de Pantallas y Componentes
+# Clases de Pantallas y Widgets
 # ---------------------------------------------------------------------------
 
-class HomeScreen(Screen):
-    pass
 
 class MainScreen(Screen):
     pass
 
+
+class HomeScreen(Screen):
+    pass
+
+
 class HistoryScreen(Screen):
     pass
 
-class RecargarConsultasScreen(Screen):
-    pass
-
-class YapePagoScreen(Screen):
-    pass
 
 class AgroveterinariasScreen(Screen):
     pass
 
+
 class AdminScreen(Screen):
     pass
+
 
 class TipsScreen(Screen):
     pass
 
+
 class MoreScreen(Screen):
     pass
 
+
 class RoundIconButton(ButtonBehavior, FloatLayout):
     icon = StringProperty("volume-high")
-    bg_color = ListProperty([0.12, 0.75, 0.50, 1])
+    bg_color = ListProperty([0.10, 0.68, 0.45, 1])
+
 
 # ---------------------------------------------------------------------------
 # Aplicación Principal Agrowillay
 # ---------------------------------------------------------------------------
 
+
 class AgrowillayApp(MDApp):
-    current_tab = StringProperty("home")
+    theme_color = hex_to_rgba(COLORS["green_600"])
     current_image_path = StringProperty("")
     speaking_lang = StringProperty("")
     last_diagnosis = ObjectProperty(None, allownone=True)
-    selected_pack_title = StringProperty("")
-    selected_pack_price = StringProperty("")
-    selected_pack_credits = NumericProperty(100)
+    current_tab = StringProperty("home")
     _admin_dialog = None
-    _status_dialog = None
 
     def build(self):
         self.title = "Agrowillay"
         self.theme_cls.primary_palette = "Green"
         self.theme_cls.theme_style = "Dark"
         self.icon = "assets/icon.png"
-        kv_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "agrowillay_ui.kv")
+        kv_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "agrowillay_ui.kv"
+        )
         return Builder.load_file(kv_path)
 
     def on_start(self):
-        self.update_balance_ui()
+        # Cargar clima y agroveterinarias en segundo plano
         Clock.schedule_once(lambda dt: self.refresh_agrovets_ui(), 0.5)
         Clock.schedule_once(lambda dt: self.check_weather_alerts(), 1.0)
-        Clock.schedule_interval(self._check_and_notify_pending_risks, 60.0)
-
-    def update_balance_ui(self):
-        try:
-            home = self.root.ids.sm.get_screen("home")
-            bal = BalanceManager.load()
-            if bal.get("es_ilimitado") and bal.get("expira_ilimitado", 0) > time.time():
-                dias_restantes = max(1, int((bal.get("expira_ilimitado", 0) - time.time()) / 86400))
-                home.ids.lbl_consultas_disponibles.text = f"👑 Plan Ilimitado Activo ({dias_restantes} días)"
-            else:
-                c = bal.get("consultas_gratis", 0)
-                home.ids.lbl_consultas_disponibles.text = f"🎁 Consultas disponibles: {c} restantes"
-        except Exception:
-            pass
-
-    def _check_and_notify_pending_risks(self, *args):
-        pendientes = HistoryManager.get_pending_alerts()
-        if not pendientes:
-            return
-        planta = pendientes[0]
-        diag = planta.get("diagnosis", {})
-        nombre = diag.get("planta_identificada", "tu cultivo")
-        problema = diag.get("plaga_o_problema", "plaga")
-        sev = str(diag.get("severidad", "ALTA")).upper()
-        NotificationService.notify(
-            f"⚠️ ALERTA FITOSANITARIA: {nombre} ({sev})",
-            f"Tu planta sigue en riesgo por {problema}. Aplica el tratamiento recomendado o acude a una agroveterinaria."
-        )
 
     # ------------------------------------------------------------------
-    # Navegación General
+    # Navegación
     # ------------------------------------------------------------------
 
     def _go(self, screen_name, tab_name):
@@ -553,9 +526,6 @@ class AgrowillayApp(MDApp):
         self._go("history", "history")
         self._refresh_history()
 
-    def go_recargas(self):
-        self._go("recargas", "recargas")
-
     def go_agrovets(self):
         self._go("agrovets", "agrovets")
         self.refresh_agrovets_ui()
@@ -574,368 +544,140 @@ class AgrowillayApp(MDApp):
         self.go_diagnosis()
         self.choose_from_gallery()
 
+    def home_show_help(self):
+        self.locate_nearby()
+
     # ------------------------------------------------------------------
-    # Flujo de Recargas y Pago con Yape
+    # Módulo ADMIN (Código de Acceso 673847)
     # ------------------------------------------------------------------
 
-    def seleccionar_paquete_yape(self, titulo: str, precio: str, creditos: int):
-        self.selected_pack_title = titulo
-        self.selected_pack_price = precio
-        self.selected_pack_credits = creditos
+    def prompt_admin_code(self):
+        """Abre un diálogo solicitando el código de acceso 673847."""
+        pin_field = MDTextField(
+            hint_text="Ingresa el código PIN",
+            password=True,
+            mode="fill",
+            max_text_length=6,
+        )
 
-        pago_screen = self.root.ids.sm.get_screen("yape_pago")
-        pago_screen.ids.lbl_paquete_elegido.text = f"Paquete Elegido: {titulo}"
-        pago_screen.ids.lbl_precio_elegido.text = f"Monto a Yapear: {precio}"
-
-        self._go("yape_pago", "recargas")
-
-    def notificar_pago_whatsapp(self):
-        msg = f"Hola, acabo de yapear para el paquete {self.selected_pack_title} ({self.selected_pack_price}) en Agrowillay. Adjunto mi comprobante para la recarga."
-        url = f"https://wa.me/{NUMERO_WHATSAPP_ADMIN}?text={msg.replace(' ', '%20')}"
-        self._open_url(url)
-
-    def subir_voucher_galeria(self):
-        try:
-            from plyer import filechooser
-            filechooser.open_file(
-                on_selection=lambda s: Clock.schedule_once(lambda dt: self._voucher_subido()),
-                filters=[("Imágenes", "*.jpg", "*.png", "*.jpeg")]
-            )
-        except Exception:
-            self._voucher_subido()
-
-    def _voucher_subido(self):
-        toast("Comprobante recibido. Tu recarga se activará en breves minutos.")
-        self.go_home()
-
-    def canjear_codigo(self, codigo_texto: str):
-        cod = codigo_texto.strip().upper()
-        if cod in CODIGOS_VALIDOS:
-            info = CODIGOS_VALIDOS[cod]
-            if info["tipo"] == "ilimitado":
-                BalanceManager.add_credits(-1)
-                toast("¡Código canjeado! Tienes 30 días ilimitados.")
+        def _verificar(*_):
+            code = pin_field.text.strip()
+            if code == ADMIN_PIN_CODE:
+                self._admin_dialog.dismiss()
+                toast("Acceso ADMIN concedido")
+                self._go("admin", "admin")
+                self.refresh_admin_agrovets_ui()
             else:
-                BalanceManager.add_credits(info.get("cantidad", 100))
-                toast(f"¡Código canjeado! Se añadieron {info.get('cantidad', 100)} consultas.")
-            self.update_balance_ui()
-            self.go_home()
-        else:
-            toast("Código incorrecto o no encontrado.")
+                toast("Código incorrecto. Acceso denegado.")
 
-    # ------------------------------------------------------------------
-    # Diagnóstico y Consumo
-    # ------------------------------------------------------------------
-
-    def analyze_photo(self):
-        if not self.current_image_path:
-            toast("Primero toma o selecciona una foto")
-            return
-
-        if not BalanceManager.can_analyze():
-            self._show_no_credits_dialog()
-            return
-
-        BalanceManager.consume_one()
-        self.update_balance_ui()
-
-        main = self.root.ids.sm.get_screen("main")
-        main.ids.analyze_btn.disabled = True
-        main.ids.analyze_spinner.active = True
-        main.ids.analyze_spinner.opacity = 1
-
-        threading.Thread(
-            target=self._run_analysis,
-            args=(self.current_image_path, DEFAULT_GEMINI_API_KEY),
-            daemon=True
-        ).start()
-
-    def _show_no_credits_dialog(self):
-        dialog = MDDialog(
-            title="Tus 10 consultas gratis se completaron",
-            text=(
-                "Has utilizado tus 10 diagnósticos de prueba gratuitos.\n\n"
-                "Para seguir cuidando tus cosechas de plagas y enfermedades, recarga fácilmente por Yape desde S/ 6.00."
-            ),
+        self._admin_dialog = MDDialog(
+            title="Acceso ADMIN---",
+            text="Introduce el código de autorización para administrar agroveterinarias:",
+            type="custom",
+            content_cls=pin_field,
             buttons=[
-                MDFlatButton(text="MÁS TARDE", on_release=lambda x: dialog.dismiss()),
+                MDFlatButton(
+                    text="CANCELAR",
+                    on_release=lambda x: self._admin_dialog.dismiss(),
+                ),
                 MDRaisedButton(
-                    text="VER PAQUETES YAPE",
-                    md_bg_color=(0.12, 0.72, 0.48, 1),
-                    on_release=lambda x: (dialog.dismiss(), self.go_recargas())
-                )
-            ]
+                    text="ENTRAR",
+                    md_bg_color=(0.85, 0.25, 0.35, 1),
+                    on_release=_verificar,
+                ),
+            ],
         )
-        dialog.open()
+        self._admin_dialog.open()
 
-    def _run_analysis(self, path, key):
+    def admin_save_agroveterinaria(self):
+        """Guarda una nueva agroveterinaria desde el panel ADMIN."""
+        admin_screen = self.root.ids.sm.get_screen("admin")
+        nom = admin_screen.ids.admin_input_nombre.text.strip()
+        ciu = admin_screen.ids.admin_input_ciudad.text.strip()
+        tel = admin_screen.ids.admin_input_telefono.text.strip()
+        wsp = admin_screen.ids.admin_input_whatsapp.text.strip()
+        not_ = admin_screen.ids.admin_input_notas.text.strip()
+
+        if not nom or not ciu or not tel or not wsp:
+            toast("Por favor completa los campos obligatorios (*)")
+            return
+
+        AgroveterinariaManager.add(nom, ciu, tel, wsp, not_)
+        toast("¡Agroveterinaria registrada con éxito!")
+
+        # Limpiar campos
+        admin_screen.ids.admin_input_nombre.text = ""
+        admin_screen.ids.admin_input_ciudad.text = ""
+        admin_screen.ids.admin_input_telefono.text = ""
+        admin_screen.ids.admin_input_whatsapp.text = ""
+        admin_screen.ids.admin_input_notas.text = ""
+
+        self.refresh_admin_agrovets_ui()
+        self.refresh_agrovets_ui()
+
+    def refresh_admin_agrovets_ui(self):
+        """Muestra las agroveterinarias en la pantalla de administración con botón de eliminar."""
         try:
-            diag = GeminiClient.analyze_image(path, key)
-            Clock.schedule_once(lambda dt: self._on_diag_success(diag))
-        except Exception as exc:
-            # Demostración local si no hay conexión a internet
-            diag_demo = {
-                "planta_identificada": "Papa / Hortaliza",
-                "plaga_o_problema": "Rancha o Tizón Tardío (Phytophthora)",
-                "severidad": "alta",
-                "confianza": "Identificación visual de lesiones necróticas.",
-                "pasos": [
-                    "Aplica fungicida de contacto inmediatamente en el envés de la hoja",
-                    "Corta y entierra los tallos y hojas fuertemente infectados",
-                    "Reduce la humedad del suelo evitando el riego nocturno"
-                ],
-                "productos_recomendados": [
-                    "Oxicloruro de Cobre (Polvo Mojable)",
-                    "Mancozeb 80% PM"
-                ],
-                "remedios_caseros": [
-                    "Caldo bordelés diluido al 1%",
-                    "Infusión concentrada de cola de caballo"
-                ],
-                "prevencion": "Siembra variedades certificadas resistentes y mantén buena distancia entre surcos.",
-                "urgencia": "Atención urgente en las próximas 24 horas."
-            }
-            Clock.schedule_once(lambda dt: self._on_diag_success(diag_demo))
-
-    @mainthread
-    def _on_diag_success(self, diag):
-        main = self.root.ids.sm.get_screen("main")
-        main.ids.analyze_btn.disabled = False
-        main.ids.analyze_spinner.active = False
-        main.ids.analyze_spinner.opacity = 0
-
-        self.last_diagnosis = diag
-        HistoryManager.add(diag, self.current_image_path)
-
-        sev = str(diag.get("severidad", "")).lower()
-        if sev in ["alta", "media"]:
-            NotificationService.notify(
-                f"⚠️ PLANTA EN RIESGO ({sev.upper()})",
-                f"Se detectó {diag.get('plaga_o_problema','')}. Se han activado alertas de seguimiento hasta que confirmes que sanó."
-            )
-
-        body = main.ids.result_body
-        body.clear_widgets()
-
-        planta = diag.get("planta_identificada", "Planta")
-        problema = diag.get("plaga_o_problema", "Sin problema")
-        severidad = diag.get("severidad", "media").upper()
-
-        body.add_widget(
-            MDLabel(
-                text=f"[b]Cultivo:[/b] {planta}\n[b]Patología:[/b] {problema}\n[b]Severidad:[/b] {severidad}",
-                markup=True,
-                theme_text_color="Custom",
-                text_color=(1, 1, 1, 1),
-                adaptive_height=True
-            )
-        )
-
-        pasos = diag.get("pasos", [])
-        if pasos:
-            body.add_widget(
-                MDLabel(
-                    text="[b]Tratamiento Recomendado:[/b]",
-                    markup=True,
-                    theme_text_color="Custom",
-                    text_color=(0.20, 0.95, 0.60, 1),
-                    adaptive_height=True
-                )
-            )
-            for p in pasos:
-                body.add_widget(
-                    MDLabel(
-                        text=f"• {p}",
-                        theme_text_color="Custom",
-                        text_color=(0.9, 0.9, 0.9, 1),
-                        font_style="Caption",
-                        adaptive_height=True
-                    )
-                )
-
-        prods = diag.get("productos_recomendados", [])
-        if prods:
-            body.add_widget(
-                MDLabel(
-                    text="[b]Insumos recomendados en Agroveterinaria:[/b]",
-                    markup=True,
-                    theme_text_color="Custom",
-                    text_color=(1, 0.75, 0.2, 1),
-                    adaptive_height=True
-                )
-            )
-            for pr in prods:
-                body.add_widget(
-                    MDLabel(
-                        text=f"• {pr}",
-                        theme_text_color="Custom",
-                        text_color=(0.9, 0.9, 0.9, 1),
-                        font_style="Caption",
-                        adaptive_height=True
-                    )
-                )
-
-        main.ids.result_card.opacity = 1
-        main.ids.result_card.disabled = False
-        main.ids.locator_card.opacity = 1
-        main.ids.locator_card.disabled = False
-        toast("Diagnóstico listo")
-
-    # ------------------------------------------------------------------
-    # Historial con Seguimiento de Salud
-    # ------------------------------------------------------------------
-
-    def _refresh_history(self):
-        try:
-            screen = self.root.ids.sm.get_screen("history")
-            box = screen.ids.history_body
+            admin_screen = self.root.ids.sm.get_screen("admin")
+            box = admin_screen.ids.admin_agrovets_list
             box.clear_widgets()
-            items = HistoryManager.load()
+            lista = AgroveterinariaManager.load()
 
-            if items:
-                screen.ids.history_placeholder.opacity = 0
-                for it in items:
-                    diag = it.get("diagnosis", {})
-                    planta_nombre = diag.get("planta_identificada", "Planta")
-                    problema = diag.get("plaga_o_problema", "Sin problema")
-                    sev = str(diag.get("severidad", "baja")).upper()
-                    recuperada = it.get("recuperada", False)
-
-                    if recuperada:
-                        badge_txt = "PLANTA RECUPERADA / TRATADA"
-                        badge_color = (0.12, 0.75, 0.45, 1)
-                        bg_card = (0.06, 0.10, 0.08, 1)
-                    elif sev == "ALTA":
-                        badge_txt = "🔴 RIESGO ALTO (ALERTAS ACTIVAS)"
-                        badge_color = (0.90, 0.25, 0.25, 1)
-                        bg_card = (0.12, 0.06, 0.07, 1)
-                    elif sev == "MEDIA":
-                        badge_txt = "🟠 RIESGO MEDIO (ALERTAS ACTIVAS)"
-                        badge_color = (0.95, 0.65, 0.15, 1)
-                        bg_card = (0.11, 0.08, 0.06, 1)
-                    else:
-                        badge_txt = "🟢 RIESGO BAJO"
-                        badge_color = (0.20, 0.85, 0.55, 1)
-                        bg_card = (0.07, 0.09, 0.13, 1)
-
-                    card = MDCard(
-                        orientation="vertical",
-                        padding=dp(14),
-                        spacing=dp(8),
-                        size_hint_y=None,
-                        adaptive_height=True,
-                        md_bg_color=bg_card,
-                        radius=[16]
+            for item in lista:
+                card = MDCard(
+                    orientation="vertical",
+                    padding=dp(14),
+                    spacing=dp(8),
+                    size_hint_y=None,
+                    height=dp(120),
+                    md_bg_color=(0.08, 0.10, 0.14, 1),
+                    radius=[14],
+                )
+                card.add_widget(
+                    MDLabel(
+                        text=f"[b]{item['nombre']}[/b]",
+                        markup=True,
+                        theme_text_color="Custom",
+                        text_color=(1, 1, 1, 1),
                     )
-
-                    card.add_widget(
-                        MDLabel(
-                            text=f"[b]{badge_txt}[/b]",
-                            markup=True,
-                            theme_text_color="Custom",
-                            text_color=badge_color,
-                            font_style="Caption",
-                            adaptive_height=True
-                        )
+                )
+                card.add_widget(
+                    MDLabel(
+                        text=f"{item['ciudad']} • Tel: {item['telefono']}",
+                        theme_text_color="Custom",
+                        text_color=(0.7, 0.75, 0.8, 1),
+                        font_style="Caption",
                     )
+                )
 
-                    card.add_widget(
-                        MDLabel(
-                            text=f"[b]{planta_nombre}[/b]\nProblema: {problema}\nFecha: {it.get('fecha','')}",
-                            markup=True,
-                            theme_text_color="Custom",
-                            text_color=(1, 1, 1, 1),
-                            font_style="Body2",
-                            adaptive_height=True
-                        )
-                    )
-
-                    btn_txt = "¿Tu planta ya sanó? Toca aquí" if not recuperada else "Ver detalles"
-                    btn_color = (0.12, 0.70, 0.45, 1) if not recuperada else (0.20, 0.30, 0.45, 1)
-
-                    btn_accion = MDRaisedButton(
-                        text=btn_txt,
-                        size_hint_x=1,
-                        height=dp(38),
-                        md_bg_color=btn_color,
-                        on_release=lambda *_, item=it: self.show_plant_status_dialog(item)
-                    )
-                    card.add_widget(btn_accion)
-                    box.add_widget(card)
-            else:
-                screen.ids.history_placeholder.opacity = 1
+                del_btn = MDRaisedButton(
+                    text="Eliminar",
+                    icon="trash-can-outline",
+                    size_hint_x=None,
+                    width=dp(100),
+                    height=dp(34),
+                    md_bg_color=(0.85, 0.25, 0.35, 1),
+                    on_release=lambda *_, i=item["id"]: self._delete_agroveterinaria(
+                        i
+                    ),
+                )
+                card.add_widget(del_btn)
+                box.add_widget(card)
         except Exception:
             _write_crash_log(traceback.format_exc())
 
-    def show_plant_status_dialog(self, item):
-        diag = item.get("diagnosis", {})
-        planta_nombre = diag.get("planta_identificada", "Planta")
-        problema = diag.get("plaga_o_problema", "Problema")
-        item_id = item.get("id")
-        recuperada = item.get("recuperada", False)
-
-        box_content = MDBoxLayout(orientation="vertical", spacing=dp(10), adaptive_height=True, padding=[0, dp(10), 0, dp(10)])
-        box_content.add_widget(
-            MDLabel(
-                text=f"[b]Cultivo:[/b] {planta_nombre}\n[b]Patología:[/b] {problema}",
-                markup=True,
-                theme_text_color="Custom",
-                text_color=(1, 1, 1, 1),
-                adaptive_height=True
-            )
-        )
-
-        if not recuperada:
-            box_content.add_widget(
-                MDLabel(
-                    text="¿Ya aplicaste el tratamiento y tu cultivo está curado?\nAl confirmar, se desactivarán las alertas periódicas para esta planta.",
-                    theme_text_color="Custom",
-                    text_color=(0.8, 0.85, 0.9, 1),
-                    font_style="Caption",
-                    adaptive_height=True
-                )
-            )
-
-            btn_confirmar = MDRaisedButton(
-                text="¡SÍ, MI PLANTA YA ESTÁ SANA!",
-                icon="check-circle",
-                size_hint_x=1,
-                height=dp(44),
-                md_bg_color=(0.10, 0.75, 0.45, 1),
-                on_release=lambda *_: self._confirm_recovered(item_id)
-            )
-            box_content.add_widget(btn_confirmar)
-        else:
-            box_content.add_widget(
-                MDLabel(
-                    text="✅ Esta planta fue marcada como RECUPERADA.",
-                    theme_text_color="Custom",
-                    text_color=(0.20, 0.85, 0.55, 1),
-                    bold=True,
-                    adaptive_height=True
-                )
-            )
-
-        self._status_dialog = MDDialog(
-            title="Seguimiento Fitosanitario",
-            type="custom",
-            content_cls=box_content,
-            buttons=[MDFlatButton(text="CERRAR", on_release=lambda x: self._status_dialog.dismiss())]
-        )
-        self._status_dialog.open()
-
-    def _confirm_recovered(self, item_id):
-        HistoryManager.mark_as_healthy(item_id)
-        if self._status_dialog:
-            self._status_dialog.dismiss()
-        toast("¡Excelente! Alertas desactivadas para este cultivo.")
-        self._refresh_history()
+    def _delete_agroveterinaria(self, item_id):
+        AgroveterinariaManager.delete(item_id)
+        toast("Agroveterinaria eliminada")
+        self.refresh_admin_agrovets_ui()
+        self.refresh_agrovets_ui()
 
     # ------------------------------------------------------------------
-    # Directorio de Agroveterinarias
+    # Directorio Público de Agroveterinarias (Llamadas & WhatsApp)
     # ------------------------------------------------------------------
 
     def refresh_agrovets_ui(self):
+        """Renderiza las agroveterinarias en la pestaña pública con botones 3D de contacto."""
         try:
             screen = self.root.ids.sm.get_screen("agrovets")
             box = screen.ids.agrovets_list
@@ -949,18 +691,19 @@ class AgrowillayApp(MDApp):
                     spacing=dp(10),
                     size_hint_y=None,
                     adaptive_height=True,
-                    md_bg_color=(0.07, 0.09, 0.14, 1),
-                    radius=[18]
+                    md_bg_color=(0.08, 0.10, 0.15, 1),
+                    radius=[18],
                 )
 
+                # Título y Ubicación
                 header = MDBoxLayout(adaptive_height=True, spacing=dp(8))
                 header.add_widget(
                     MDLabel(
-                        text=f"[b]{item['nombre']}[/b]\n[color=54C7EC]{item['ciudad']}[/color]",
+                        text=f"[b]{item['nombre']}[/b]\n[color=64B5F6]{item['ciudad']}[/color]",
                         markup=True,
                         theme_text_color="Custom",
                         text_color=(1, 1, 1, 1),
-                        adaptive_height=True
+                        adaptive_height=True,
                     )
                 )
                 card.add_widget(header)
@@ -972,12 +715,14 @@ class AgrowillayApp(MDApp):
                             theme_text_color="Custom",
                             text_color=(0.75, 0.80, 0.85, 1),
                             font_style="Caption",
-                            adaptive_height=True
+                            adaptive_height=True,
                         )
                     )
 
+                # Botones de Acción: WhatsApp y Llamada
                 acciones = MDBoxLayout(adaptive_height=True, spacing=dp(10))
 
+                # Botón WhatsApp Directo
                 wsp_num = item.get("whatsapp", "")
                 wsp_url = f"https://wa.me/{wsp_num}?text=Hola,%20vi%20su%20agroveterinaria%20en%20Agrowillay%20y%20deseo%20hacer%20una%20consulta."
                 btn_wsp = MDRaisedButton(
@@ -986,9 +731,10 @@ class AgrowillayApp(MDApp):
                     size_hint_x=0.5,
                     height=dp(42),
                     md_bg_color=(0.10, 0.70, 0.40, 1),
-                    on_release=lambda *_, u=wsp_url: self._open_url(u)
+                    on_release=lambda *_, u=wsp_url: self._open_url(u),
                 )
 
+                # Botón Llamar Directo
                 tel_num = item.get("telefono", "")
                 btn_tel = MDRaisedButton(
                     text="Llamar",
@@ -996,7 +742,7 @@ class AgrowillayApp(MDApp):
                     size_hint_x=0.5,
                     height=dp(42),
                     md_bg_color=(0.18, 0.30, 0.45, 1),
-                    on_release=lambda *_, t=tel_num: self._call_phone(t)
+                    on_release=lambda *_, t=tel_num: self._call_phone(t),
                 )
 
                 acciones.add_widget(btn_wsp)
@@ -1007,10 +753,12 @@ class AgrowillayApp(MDApp):
             _write_crash_log(traceback.format_exc())
 
     def _call_phone(self, phone_number):
+        """Abre la app de llamadas del teléfono."""
         if not phone_number:
             toast("Teléfono no disponible")
             return
-        self._open_url(f"tel:{phone_number.strip()}")
+        url = f"tel:{phone_number.strip()}"
+        self._open_url(url)
 
     # ------------------------------------------------------------------
     # Clima 3D
@@ -1023,18 +771,19 @@ class AgrowillayApp(MDApp):
             box.clear_widgets()
             box.add_widget(
                 MDLabel(
-                    text="Obteniendo sensores meteorológicos y satelitales...",
+                    text="Consultando pronóstico y sensores climáticos...",
                     theme_text_color="Custom",
                     text_color=(0.7, 0.75, 0.8, 1),
-                    adaptive_height=True
+                    adaptive_height=True,
                 )
             )
 
-            lat_def, lon_def = -13.5414, -72.6978  # Curahuasi / Apurímac
+            # Por defecto Curahuasi/Apurímac si el GPS no está activo
+            lat_def, lon_def = -13.5414, -72.6978
             threading.Thread(
                 target=self._fetch_weather_thread,
                 args=(lat_def, lon_def),
-                daemon=True
+                daemon=True,
             ).start()
         except Exception:
             _write_crash_log(traceback.format_exc())
@@ -1044,7 +793,11 @@ class AgrowillayApp(MDApp):
             data = WeatherClient.get_forecast(lat, lon)
             Clock.schedule_once(lambda dt: self._render_weather(data))
         except Exception:
-            Clock.schedule_once(lambda dt: self._show_weather_msg("Verifica tu conexión a internet para actualizar el pronóstico."))
+            Clock.schedule_once(
+                lambda dt: self._show_weather_msg(
+                    "No se pudo consultar el clima. Verifica tu conexión a internet."
+                )
+            )
 
     @mainthread
     def _render_weather(self, data):
@@ -1058,6 +811,7 @@ class AgrowillayApp(MDApp):
             hum = current.get("relative_humidity_2m", "--")
             viento = current.get("wind_speed_10m", "--")
 
+            # Resumen actual
             resumen = MDBoxLayout(adaptive_height=True, spacing=dp(12))
             resumen.add_widget(
                 MDLabel(
@@ -1065,7 +819,7 @@ class AgrowillayApp(MDApp):
                     markup=True,
                     theme_text_color="Custom",
                     text_color=(1, 1, 1, 1),
-                    adaptive_height=True
+                    adaptive_height=True,
                 )
             )
             resumen.add_widget(
@@ -1074,10 +828,45 @@ class AgrowillayApp(MDApp):
                     theme_text_color="Custom",
                     text_color=(0.75, 0.80, 0.85, 1),
                     font_style="Caption",
-                    adaptive_height=True
+                    adaptive_height=True,
                 )
             )
             box.add_widget(resumen)
+
+            # Evaluación de alertas
+            dias = data.get("dias", [])
+            riesgos = evaluar_riesgo_climatico(dias)
+
+            if riesgos:
+                for r in riesgos:
+                    alerta_box = MDBoxLayout(
+                        adaptive_height=True,
+                        padding=dp(8),
+                        spacing=dp(8),
+                        md_bg_color=(0.30, 0.10, 0.10, 0.6),
+                        radius=[10],
+                    )
+                    alerta_box.add_widget(
+                        MDLabel(
+                            text=f"[b]{r['tipo']}[/b]: {r['detalle']}",
+                            markup=True,
+                            theme_text_color="Custom",
+                            text_color=(1, 0.8, 0.8, 1),
+                            font_style="Caption",
+                            adaptive_height=True,
+                        )
+                    )
+                    box.add_widget(alerta_box)
+            else:
+                box.add_widget(
+                    MDLabel(
+                        text="Condiciones favorables: Sin alertas críticas de helada o tormenta para los próximos 3 días.",
+                        theme_text_color="Custom",
+                        text_color=(0.20, 0.85, 0.55, 1),
+                        font_style="Caption",
+                        adaptive_height=True,
+                    )
+                )
         except Exception:
             _write_crash_log(traceback.format_exc())
 
@@ -1092,22 +881,22 @@ class AgrowillayApp(MDApp):
                     text=msg,
                     theme_text_color="Custom",
                     text_color=(0.7, 0.75, 0.8, 1),
-                    adaptive_height=True
+                    adaptive_height=True,
                 )
             )
         except Exception:
             pass
 
     # ------------------------------------------------------------------
-    # Cámara y Galería
+    # Cámara y Diagnóstico
     # ------------------------------------------------------------------
 
     def take_photo(self):
         if platform != "android":
-            toast("Cámara disponible en el celular")
+            toast("La cámara solo está disponible en el celular")
             return
         try:
-            from android import mActivity, activity
+            from android import activity, mActivity
             from jnius import autoclass, cast
 
             Intent = autoclass("android.content.Intent")
@@ -1124,7 +913,9 @@ class AgrowillayApp(MDApp):
             photo_uri = FileProviderCls.getUriForFile(mActivity, auth, photo_file)
 
             intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
-            intent.putExtra(MediaStore.EXTRA_OUTPUT, cast("android.os.Parcelable", photo_uri))
+            intent.putExtra(
+                MediaStore.EXTRA_OUTPUT, cast("android.os.Parcelable", photo_uri)
+            )
             intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
 
@@ -1135,7 +926,7 @@ class AgrowillayApp(MDApp):
             activity.bind(on_activity_result=self._on_cam_result)
             mActivity.startActivityForResult(intent, CAMERA_REQUEST_CODE)
         except Exception as exc:
-            toast(f"Error al abrir cámara: {exc}")
+            toast(f"No se pudo abrir la cámara: {exc}")
 
     @mainthread
     def _on_cam_result(self, req, res, data):
@@ -1143,6 +934,7 @@ class AgrowillayApp(MDApp):
             return
         try:
             from android import activity
+
             activity.unbind(on_activity_result=self._on_cam_result)
         except Exception:
             pass
@@ -1152,9 +944,12 @@ class AgrowillayApp(MDApp):
     def choose_from_gallery(self):
         try:
             from plyer import filechooser
+
             filechooser.open_file(
-                on_selection=lambda s: Clock.schedule_once(lambda dt: self._on_gal_sel(s)),
-                filters=[("Imágenes", "*.jpg", "*.jpeg", "*.png", "*.webp")]
+                on_selection=lambda s: Clock.schedule_once(
+                    lambda dt: self._on_gal_sel(s)
+                ),
+                filters=[("Imágenes", "*.jpg", "*.jpeg", "*.png", "*.webp")],
             )
         except Exception:
             toast("Selector no disponible en este dispositivo")
@@ -1171,146 +966,140 @@ class AgrowillayApp(MDApp):
         main.ids.preview_placeholder.opacity = 0
         main.ids.analyze_btn.disabled = False
 
-    # ------------------------------------------------------------------
-    # Módulo ADMIN--- (Código 673847)
-    # ------------------------------------------------------------------
-
-    def prompt_admin_code(self):
-        pin_field = MDTextField(
-            hint_text="Ingresa el código PIN",
-            password=True,
-            mode="fill",
-            max_text_length=6
-        )
-
-        def _verificar(*_):
-            code = pin_field.text.strip()
-            if code == ADMIN_PIN_CODE:
-                self._admin_dialog.dismiss()
-                toast("Acceso ADMIN autorizado")
-                self._go("admin", "admin")
-                self.refresh_admin_agrovets_ui()
-            else:
-                toast("Código inválido. Acceso denegado.")
-
-        self._admin_dialog = MDDialog(
-            title="Acceso ADMIN---",
-            text="Introduce el código de autorización para gestionar agroveterinarias y códigos:",
-            type="custom",
-            content_cls=pin_field,
-            buttons=[
-                MDFlatButton(text="CANCELAR", on_release=lambda x: self._admin_dialog.dismiss()),
-                MDRaisedButton(text="ENTRAR", md_bg_color=(0.85, 0.25, 0.35, 1), on_release=_verificar)
-            ]
-        )
-        self._admin_dialog.open()
-
-    def admin_generar_codigo(self, cantidad):
-        nuevo_cod = f"AGRO-{int(time.time()) % 10000}"
-        if cantidad == -1:
-            CODIGOS_VALIDOS[nuevo_cod] = {"tipo": "ilimitado", "dias": 30}
-            toast(f"Código Creado: {nuevo_cod} (30 días ilimitados)")
-        else:
-            CODIGOS_VALIDOS[nuevo_cod] = {"tipo": "creditos", "cantidad": cantidad}
-            toast(f"Código Creado: {nuevo_cod} ({cantidad} consultas)")
-
-    def admin_save_agroveterinaria(self):
-        admin_screen = self.root.ids.sm.get_screen("admin")
-        nom = admin_screen.ids.admin_input_nombre.text.strip()
-        ciu = admin_screen.ids.admin_input_ciudad.text.strip()
-        tel = admin_screen.ids.admin_input_telefono.text.strip()
-        wsp = admin_screen.ids.admin_input_whatsapp.text.strip()
-        not_ = admin_screen.ids.admin_input_notas.text.strip()
-
-        if not nom or not ciu or not tel or not wsp:
-            toast("Completa los campos obligatorios (*)")
+    def analyze_photo(self):
+        if not self.current_image_path:
+            toast("Primero toma o selecciona una foto")
             return
+        key = ConfigManager.load_api_key()
+        main = self.root.ids.sm.get_screen("main")
+        main.ids.analyze_btn.disabled = True
+        main.ids.analyze_btn.text = "ANALIZANDO..."
+        main.ids.analyze_spinner.active = True
+        main.ids.analyze_spinner.opacity = 1
 
-        AgroveterinariaManager.add(nom, ciu, tel, wsp, not_)
-        toast("Agroveterinaria registrada con éxito")
+        threading.Thread(
+            target=self._run_analysis,
+            args=(self.current_image_path, key),
+            daemon=True,
+        ).start()
 
-        admin_screen.ids.admin_input_nombre.text = ""
-        admin_screen.ids.admin_input_ciudad.text = ""
-        admin_screen.ids.admin_input_telefono.text = ""
-        admin_screen.ids.admin_input_whatsapp.text = ""
-        admin_screen.ids.admin_input_notas.text = ""
-
-        self.refresh_admin_agrovets_ui()
-        self.refresh_agrovets_ui()
-
-    def refresh_admin_agrovets_ui(self):
+    def _run_analysis(self, path, key):
         try:
-            admin_screen = self.root.ids.sm.get_screen("admin")
-            box = admin_screen.ids.admin_agrovets_list
-            box.clear_widgets()
-            lista = AgroveterinariaManager.load()
+            diag = GeminiClient.analyze_image(path, key)
+            Clock.schedule_once(lambda dt: self._on_diag_success(diag))
+        except Exception as exc:
+            Clock.schedule_once(lambda dt: self._on_diag_error(str(exc)))
 
-            for item in lista:
-                card = MDCard(
-                    orientation="vertical",
-                    padding=dp(14),
-                    spacing=dp(8),
-                    size_hint_y=None,
-                    height=dp(116),
-                    md_bg_color=(0.07, 0.09, 0.13, 1),
-                    radius=[14]
+    @mainthread
+    def _on_diag_error(self, err):
+        main = self.root.ids.sm.get_screen("main")
+        main.ids.analyze_btn.disabled = False
+        main.ids.analyze_btn.text = "ANALIZAR PLANTA CON IA"
+        main.ids.analyze_spinner.active = False
+        main.ids.analyze_spinner.opacity = 0
+        toast(f"Error: {err}")
+
+    @mainthread
+    def _on_diag_success(self, diag):
+        main = self.root.ids.sm.get_screen("main")
+        main.ids.analyze_btn.disabled = False
+        main.ids.analyze_btn.text = "ANALIZAR PLANTA CON IA"
+        main.ids.analyze_spinner.active = False
+        main.ids.analyze_spinner.opacity = 0
+
+        self.last_diagnosis = diag
+        HistoryManager.add(diag, self.current_image_path)
+        self._refresh_history()
+
+        # Renderizar resultados
+        body = main.ids.result_body
+        body.clear_widgets()
+
+        planta = diag.get("planta_identificada", "Planta")
+        problema = diag.get("plaga_o_problema", "Sin problema")
+        severidad = diag.get("severidad", "media").upper()
+
+        body.add_widget(
+            MDLabel(
+                text=f"[b]Planta:[/b] {planta}\n[b]Problema:[/b] {problema}\n[b]Severidad:[/b] {severidad}",
+                markup=True,
+                theme_text_color="Custom",
+                text_color=(1, 1, 1, 1),
+                adaptive_height=True,
+            )
+        )
+
+        pasos = diag.get("pasos", [])
+        if pasos:
+            body.add_widget(
+                MDLabel(
+                    text="[b]Tratamiento Recomendado:[/b]",
+                    markup=True,
+                    theme_text_color="Custom",
+                    text_color=(0.20, 0.85, 0.55, 1),
+                    adaptive_height=True,
                 )
-                card.add_widget(
+            )
+            for p in pasos:
+                body.add_widget(
                     MDLabel(
-                        text=f"[b]{item['nombre']}[/b]",
-                        markup=True,
+                        text=f"• {p}",
                         theme_text_color="Custom",
-                        text_color=(1, 1, 1, 1)
+                        text_color=(0.9, 0.9, 0.9, 1),
+                        font_style="Caption",
+                        adaptive_height=True,
                     )
                 )
-                card.add_widget(
+
+        prods = diag.get("productos_recomendados", [])
+        if prods:
+            body.add_widget(
+                MDLabel(
+                    text="[b]Productos a buscar en Agroveterinaria:[/b]",
+                    markup=True,
+                    theme_text_color="Custom",
+                    text_color=(1, 0.75, 0.2, 1),
+                    adaptive_height=True,
+                )
+            )
+            for pr in prods:
+                body.add_widget(
                     MDLabel(
-                        text=f"{item['ciudad']} • Tel: {item['telefono']}",
+                        text=f"• {pr}",
                         theme_text_color="Custom",
-                        text_color=(0.7, 0.75, 0.8, 1),
-                        font_style="Caption"
+                        text_color=(0.9, 0.9, 0.9, 1),
+                        font_style="Caption",
+                        adaptive_height=True,
                     )
                 )
 
-                del_btn = MDRaisedButton(
-                    text="Eliminar",
-                    icon="trash-can-outline",
-                    size_hint_x=None,
-                    width=dp(100),
-                    height=dp(32),
-                    md_bg_color=(0.85, 0.25, 0.35, 1),
-                    on_release=lambda *_, i=item["id"]: self._delete_agroveterinaria(i)
-                )
-                card.add_widget(del_btn)
-                box.add_widget(card)
-        except Exception:
-            _write_crash_log(traceback.format_exc())
-
-    def _delete_agroveterinaria(self, item_id):
-        AgroveterinariaManager.delete(item_id)
-        toast("Agroveterinaria eliminada")
-        self.refresh_admin_agrovets_ui()
-        self.refresh_agrovets_ui()
-
-    # ------------------------------------------------------------------
-    # Herramientas Auxiliares (Lectura TTS, Enlaces, Ayuda)
-    # ------------------------------------------------------------------
-
-    def speak_diagnosis(self, diag):
-        toast("Reproduciendo audio en español...")
-
-    def speak_diagnosis_quechua(self, diag):
-        toast("Reproduciendo audio en quechua...")
+        main.ids.result_card.opacity = 1
+        main.ids.result_card.disabled = False
+        main.ids.locator_card.opacity = 1
+        main.ids.locator_card.disabled = False
 
     def locate_nearby(self):
+        """Abre Google Maps con agroveterinarias y viveros cercanos."""
         url = "https://www.google.com/maps/search/agroveterinaria+vivero+cerca+de+mi"
         self._open_url(url)
+
+    def speak_diagnosis(self, diag):
+        if not diag:
+            return
+        toast("Leyendo diagnóstico en voz alta...")
+        # Lógica de texto a voz nativo
+
+    def speak_diagnosis_quechua(self, diag):
+        if not diag:
+            return
+        toast("Traduciendo y reproduciendo en Quechua...")
 
     def _open_url(self, url):
         try:
             if platform == "android":
                 from android import mActivity
                 from jnius import autoclass
+
                 Uri = autoclass("android.net.Uri")
                 Intent = autoclass("android.content.Intent")
                 intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
@@ -1320,19 +1109,55 @@ class AgrowillayApp(MDApp):
             pass
         webbrowser.open(url)
 
-    def show_help_dialog(self):
+    def _refresh_history(self):
+        try:
+            screen = self.root.ids.sm.get_screen("history")
+            box = screen.ids.history_body
+            box.clear_widgets()
+            items = HistoryManager.load()
+            if items:
+                screen.ids.history_placeholder.opacity = 0
+                for it in items:
+                    d = it.get("diagnosis", {})
+                    card = MDCard(
+                        padding=dp(12),
+                        size_hint_y=None,
+                        height=dp(80),
+                        md_bg_color=(0.08, 0.10, 0.14, 1),
+                        radius=[14],
+                    )
+                    card.add_widget(
+                        MDLabel(
+                            text=f"[b]{d.get('planta_identificada','Planta')}[/b]\n{d.get('plaga_o_problema','')}\n{it.get('fecha','')}",
+                            markup=True,
+                            theme_text_color="Custom",
+                            text_color=(1, 1, 1, 1),
+                            font_style="Caption",
+                        )
+                    )
+                    box.add_widget(card)
+            else:
+                screen.ids.history_placeholder.opacity = 1
+        except Exception:
+            pass
+
+    def open_bitacora_dialog(self):
+        toast("Bitácora Agrícola activa")
+
+    def show_about_dialog(self):
         MDDialog(
-            title="Guía de Uso para el Agricultor",
-            text="1. Toma una foto con buena luz a 15 cm de la hoja dañada.\n2. Presiona Analizar para conocer la plaga y qué insumos usar.\n3. Si está en riesgo Alto o Medio, la app te enviará alertas hasta que confirmes que tu cultivo ya sanó.",
-            buttons=[MDFlatButton(text="ENTENDIDO", on_release=lambda x: x.dismiss())]
+            title="Agrowillay",
+            text="Aplicación de fitosanidad agrícola con IA y conexión a agroveterinarias locales.",
+            buttons=[MDFlatButton(text="OK", on_release=lambda x: x.dismiss())],
         ).open()
 
-    def show_notification_info(self):
+    def show_help_dialog(self):
         MDDialog(
-            title="Monitoreo Fitosanitario Activo",
-            text="Agrowillay revisa tus plantas diagnosticadas y te enviará recordatorios para que no olvides fumigar o curarlas a tiempo.",
-            buttons=[MDFlatButton(text="ENTENDIDO", on_release=lambda x: x.dismiss())]
+            title="Ayuda Agrowillay",
+            text="1. Fotografía la planta con buena luz.\n2. Presiona Analizar para ver el diagnóstico y tratamiento.\n3. Contacta con agroveterinarias locales mediante WhatsApp o llamada para adquirir tus insumos.",
+            buttons=[MDFlatButton(text="ENTENDIDO", on_release=lambda x: x.dismiss())],
         ).open()
+
 
 def _write_crash_log(txt):
     try:
@@ -1341,10 +1166,12 @@ def _write_crash_log(txt):
     except Exception:
         pass
 
+
 class _Handler(ExceptionHandler):
     def handle_exception(self, inst):
         _write_crash_log(traceback.format_exc())
         return ExceptionManager.PASS
+
 
 if __name__ == "__main__":
     ExceptionManager.add_handler(_Handler())
