@@ -88,7 +88,7 @@ GEMINI_ENDPOINT = (
 )
 
 DEFAULT_GEMINI_API_KEY = "AQ.Ab8RN6JUSmY_mCwVu6L7n2oa05nwvxsf8NbHKdFWd_Tkbo-n0Q"
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.1.1"
 GITHUB_REPO = "Alexander12Po/APK-PLAGA-DETECTOR-"
 
 DIAGNOSIS_PROMPT = """Eres un ingeniero agrónomo experto en fitosanidad y control de plagas.
