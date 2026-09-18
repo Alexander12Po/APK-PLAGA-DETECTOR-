@@ -79,7 +79,7 @@ CAMERA_REQUEST_CODE = 1888
 ADMIN_PIN_CODE = "673847"
 
 # Modelos recomendados vigentes de Google Gemini
-GEMINI_MODELS = ["gemini-3.7-flash", "gemini-3.6-flash"]
+GEMINI_MODELS = ["gemini-3.6-flash", "gemini-3.5-flash"]
 # Modelo separado para generar audio (texto a voz), usado para el
 # boton de Quechua ya que el lector nativo del celular no trae ninguna
 # voz en quechua instalada.
@@ -88,7 +88,7 @@ GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{mode
 
 # Clave por defecto o variable de entorno
 DEFAULT_GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AQ.Ab8RN6KAogAaCdNl0j3XVKyHrb1DvE0XoqaK9-K9gjfI9dInkQ")
-APP_VERSION = "1.1.5"
+APP_VERSION = "1.1.4"
 GITHUB_REPO = "Alexander12Po/APK-PLAGA-DETECTOR-"
 
 DIAGNOSIS_PROMPT = """Eres un ingeniero agrónomo experto en fitosanidad y control de plagas agrícolas en los Andes y valles interandinos.
