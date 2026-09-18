@@ -1132,26 +1132,74 @@ class AgrowillayApp(MDApp):
         main.ids.analyze_spinner.active = True
         main.ids.analyze_spinner.opacity = 1
 
-        threading.Thread(target=self._run_analysis, args=(self.current_image_path, key), daemon=True).start()
+        # Token para saber si esta corrida de analisis sigue siendo la
+        # vigente (si el usuario reintenta o si el vigilante de abajo
+        # dispara, evita que una respuesta tardia "pise" a la nueva).
+        self._analisis_token = getattr(self, "_analisis_token", 0) + 1
+        token = self._analisis_token
+        _write_crash_log(
+            f"DIAGNOSTICO: iniciando analisis (token={token}) foto={self.current_image_path}"
+        )
 
-    def _run_analysis(self, path, key):
+        # Vigilante: si a los 40s la peticion sigue sin responder ni
+        # fallar (red colgada a nivel de sistema, sin disparar ni
+        # siquiera el timeout de requests), avisamos igual en vez de
+        # dejar el boton girando para siempre.
+        Clock.schedule_once(lambda dt: self._chequear_analisis_colgado(token), 40)
+
+        threading.Thread(target=self._run_analysis, args=(self.current_image_path, key, token), daemon=True).start()
+
+    def _chequear_analisis_colgado(self, token):
+        if getattr(self, "_analisis_token", 0) != token:
+            return  # ya termino (exito o error) o ya se reintento
+        _write_crash_log(
+            f"DIAGNOSTICO: analisis (token={token}) sigue colgado a los 40s, "
+            "probablemente la red esta bloqueando la conexion en silencio."
+        )
+        self._on_diag_error(
+            "La app lleva más de 40s esperando respuesta sin que la red "
+            "ni falle ni conteste. Esto casi siempre pasa cuando el WiFi "
+            "actual bloquea la conexión a Google en silencio (redes de "
+            "colegios/instituciones suelen hacer esto). Prueba con datos "
+            "móviles o con otra red y vuelve a intentar.",
+            token,
+        )
+
+    def _run_analysis(self, path, key, token):
         try:
+            _write_crash_log(f"DIAGNOSTICO: (token={token}) comprimiendo y enviando a Gemini...")
             diag = GeminiClient.analyze_image(path, key)
-            Clock.schedule_once(lambda dt: self._on_diag_success(diag))
+            _write_crash_log(f"DIAGNOSTICO: (token={token}) respuesta recibida OK")
+            Clock.schedule_once(lambda dt: self._on_diag_success(diag, token))
         except Exception as exc:
-            Clock.schedule_once(lambda dt: self._on_diag_error(str(exc)))
+            _write_crash_log(
+                f"DIAGNOSTICO: (token={token}) fallo con error:\n" + traceback.format_exc()
+            )
+            Clock.schedule_once(lambda dt: self._on_diag_error(str(exc), token))
 
     @mainthread
-    def _on_diag_error(self, err):
+    def _on_diag_error(self, err, token=None):
+        if token is not None and getattr(self, "_analisis_token", 0) != token:
+            return  # una corrida mas nueva ya tomo el control de la UI
+        if token is not None:
+            self._analisis_token = 0  # invalida para que el vigilante no vuelva a disparar
         main = self.root.ids.sm.get_screen("main")
         main.ids.analyze_btn.disabled = False
         main.ids.analyze_btn.text = "ANALIZAR PLANTA CON IA"
         main.ids.analyze_spinner.active = False
         main.ids.analyze_spinner.opacity = 0
-        toast(f"Error: {err}")
+        MDDialog(
+            title="No se pudo completar el análisis",
+            text=str(err),
+            buttons=[MDFlatButton(text="OK", on_release=lambda x: x.dismiss())],
+        ).open()
 
     @mainthread
-    def _on_diag_success(self, diag):
+    def _on_diag_success(self, diag, token=None):
+        if token is not None and getattr(self, "_analisis_token", 0) != token:
+            return  # llego tarde, el vigilante ya mostro el aviso de timeout
+        if token is not None:
+            self._analisis_token = 0
         main = self.root.ids.sm.get_screen("main")
         main.ids.analyze_btn.disabled = False
         main.ids.analyze_btn.text = "ANALIZAR PLANTA CON IA"
