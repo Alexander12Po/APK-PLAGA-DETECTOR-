@@ -2,7 +2,7 @@
 """
 Agrowillay — App móvil (Kivy + KivyMD)
 Diagnóstico de plagas con IA Gemini, Clima y Directorio de Agroveterinarias.
-Totalmente sincronizado con agrowillay_ui.kv.
+Totalmente sincronizado con agrowillay_ui.kv y modelos Gemini 2.5 Flash / 2.5 Pro.
 """
 
 import base64
@@ -77,27 +77,31 @@ CAMERA_REQUEST_CODE = 1888
 
 ADMIN_PIN_CODE = "673847"
 
-GEMINI_MODELS = ["gemini-2.5-flash", "gemini-3.5-flash"]
+# Modelos recomendados vigentes de Google Gemini
+GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.5-pro"]
 GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
-DEFAULT_GEMINI_API_KEY = "AQ.Ab8RN6JUSmY_mCwVu6L7n2oa05nwvxsf8NbHKdFWd_Tkbo-n0Q"
-APP_VERSION = "1.1.0"
+
+# Clave por defecto o variable de entorno
+DEFAULT_GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AQ.Ab8RN6JUSmY_mCwVu6L7n2oa05nwvxsf8NbHKdFWd_Tkbo-n0Q")
+APP_VERSION = "1.1.2"
 GITHUB_REPO = "Alexander12Po/APK-PLAGA-DETECTOR-"
 
-DIAGNOSIS_PROMPT = """Eres un ingeniero agrónomo experto en fitosanidad y control de plagas agrícolas.
-Observa detenidamente la foto de la planta y responde ÚNICAMENTE con un objeto JSON válido, sin bloques de código, sin markdown:
+DIAGNOSIS_PROMPT = """Eres un ingeniero agrónomo experto en fitosanidad y control de plagas agrícolas en los Andes y valles interandinos.
+Observa la foto de la planta y responde ÚNICAMENTE con un objeto JSON válido, sin formato markdown, sin comillas triples:
 
 {
-  "planta_identificada": "Nombre común de la planta si es identificable",
-  "plaga_o_problema": "Nombre de la plaga o enfermedad identificada",
-  "severidad": "alta",
-  "confianza": "Certeza del diagnóstico",
+  "planta_identificada": "nombre común de la planta si es identificable (ej. Maíz, Papa, Palto, Tomate, Haba)",
+  "plaga_o_problema": "nombre de la plaga, hongo o problema fitosanitario detectado",
+  "severidad": "alta | media | baja",
+  "confianza": "grado de certeza basado en la evidencia visual",
   "sintomas_observados": ["síntoma 1", "síntoma 2"],
-  "pasos": ["paso 1 de tratamiento", "paso 2 de control"],
-  "productos_recomendados": ["ingrediente activo o producto comercial"],
-  "remedios_caseros": ["remedio orgánico o casero 1", "remedio 2"],
-  "prevencion": "Recomendación preventiva",
-  "urgencia": "Urgencia del tratamiento"
-}"""
+  "pasos": ["paso 1 de tratamiento", "paso 2 de aplicación", "paso 3 cultural"],
+  "productos_recomendados": ["producto comercial o ingrediente activo ej. Oxicloruro de Cobre, Mancozeb"],
+  "remedios_caseros": ["remedio orgánico 1 (ej. caldo bordelés)", "remedio casero 2"],
+  "prevencion": "recomendación técnica para evitar futuros brotes",
+  "urgencia": "nivel de urgencia del tratamiento"
+}
+Escribe todos los textos en español."""
 
 COLORS = {
     "green_700": "#0A5038",
@@ -114,7 +118,32 @@ def hex_to_rgba(hex_color, alpha=1):
     return [r, g, b, alpha]
 
 # ---------------------------------------------------------------------------
-# Gestor de Agroveterinarias
+# Redimensionar Foto antes de Enviar (Evita saturar memoria y límites de red)
+# ---------------------------------------------------------------------------
+
+def comprimir_imagen_para_ia(ruta_origen: str) -> bytes:
+    """Reduce la foto a máx 1024px y formato JPEG optimizado antes de mandarla a Gemini."""
+    try:
+        from PIL import Image as PILImage
+        import io
+
+        with PILImage.open(ruta_origen) as img:
+            img = img.convert("RGB")
+            max_size = 1024
+            ratio = min(max_size / img.width, max_size / img.height)
+            if ratio < 1.0:
+                nuevo_tamano = (int(img.width * ratio), int(img.height * ratio))
+                img = img.resize(nuevo_tamano, PILImage.Resampling.LANCZOS)
+            
+            buffer = io.BytesIO()
+            img.save(buffer, format="JPEG", quality=80)
+            return buffer.getvalue()
+    except Exception:
+        with open(ruta_origen, "rb") as f:
+            return f.read()
+
+# ---------------------------------------------------------------------------
+# Gestores de Datos
 # ---------------------------------------------------------------------------
 
 class AgroveterinariaManager:
@@ -201,6 +230,28 @@ class ConfigManager:
     def save_api_key(key: str):
         CONFIG_FILE.write_text(json.dumps({"gemini_api_key": key.strip()}), encoding="utf-8")
 
+class BitacoraManager:
+    @staticmethod
+    def load() -> dict:
+        if BITACORA_FILE.exists():
+            try:
+                return json.loads(BITACORA_FILE.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+        return {}
+
+    @staticmethod
+    def save(cultivo="", variedad="", fecha_siembra="", superficie=""):
+        BITACORA_FILE.write_text(
+            json.dumps({
+                "cultivo": cultivo.strip(),
+                "variedad": variedad.strip(),
+                "fecha_siembra": fecha_siembra.strip(),
+                "superficie": superficie.strip(),
+            }),
+            encoding="utf-8"
+        )
+
 class HistoryManager:
     MAX_ENTRADAS = 30
 
@@ -233,6 +284,91 @@ class HistoryManager:
             HISTORY_FILE.write_text(json.dumps(entradas[:cls.MAX_ENTRADAS]), encoding="utf-8")
         except Exception:
             _write_crash_log(traceback.format_exc())
+
+# ---------------------------------------------------------------------------
+# Cliente Gemini IA Robusto y Transparente
+# ---------------------------------------------------------------------------
+
+class GeminiClient:
+    class GeminiError(Exception):
+        pass
+
+    @staticmethod
+    def _extract_json(text: str) -> dict:
+        cleaned = text.strip()
+        cleaned = cleaned.replace("```json", "").replace("```JSON", "").replace("```", "").strip()
+        start = cleaned.find("{")
+        end = cleaned.rfind("}")
+        if start == -1 or end == -1 or end < start:
+            raise GeminiClient.GeminiError("La respuesta de la IA no trajo un formato JSON válido.")
+        return json.loads(cleaned[start:end + 1])
+
+    @classmethod
+    def analyze_image(cls, image_path: str, api_key: str) -> dict:
+        import requests
+
+        api_key = (api_key or "").strip()
+        if not api_key:
+            raise cls.GeminiError("Configura tu clave de Gemini en el Panel ADMIN (código 673847).")
+
+        # 1. Comprimir imagen para transferencia ultrarrápida
+        image_bytes = comprimir_imagen_para_ia(image_path)
+        image_b64 = base64.b64encode(image_bytes).decode("ascii")
+
+        payload = {
+            "contents": [
+                {
+                    "parts": [
+                        {"text": DIAGNOSIS_PROMPT},
+                        {
+                            "inline_data": {
+                                "mime_type": "image/jpeg",
+                                "data": image_b64
+                            }
+                        }
+                    ]
+                }
+            ],
+            "generationConfig": {
+                "response_mime_type": "application/json",
+                "max_output_tokens": 2048,
+                "temperature": 0.3
+            }
+        }
+
+        ultimo_error = ""
+        for model in GEMINI_MODELS:
+            url = GEMINI_ENDPOINT.format(model=model, key=api_key)
+            try:
+                resp = requests.post(url, json=payload, timeout=35)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    candidates = data.get("candidates", [])
+                    if not candidates:
+                        continue
+                    partes = candidates[0].get("content", {}).get("parts", [])
+                    if not partes:
+                        continue
+                    texto = partes[0].get("text", "")
+                    return cls._extract_json(texto)
+                else:
+                    try:
+                        err_json = resp.json()
+                        msg = err_json.get("error", {}).get("message", "")
+                        if "API key not valid" in msg:
+                            ultimo_error = "Clave de Gemini inválida. Ingrésala en el Panel ADMIN (código 673847)."
+                        elif "quota" in msg.lower() or resp.status_code == 429:
+                            ultimo_error = "Límite de peticiones alcanzado. Espera un momento."
+                        elif msg:
+                            ultimo_error = f"{msg} (HTTP {resp.status_code})"
+                        else:
+                            ultimo_error = f"HTTP {resp.status_code}"
+                    except Exception:
+                        ultimo_error = f"HTTP {resp.status_code}"
+            except Exception as e:
+                ultimo_error = str(e)
+
+        raise cls.GeminiError(f"Error IA: {ultimo_error}")
 
 # ---------------------------------------------------------------------------
 # Clima con Open-Meteo
@@ -302,68 +438,6 @@ def evaluar_riesgo_climatico(dias):
     return riesgos
 
 # ---------------------------------------------------------------------------
-# Cliente Gemini IA
-# ---------------------------------------------------------------------------
-
-class GeminiClient:
-    class GeminiError(Exception):
-        pass
-
-    @staticmethod
-    def _extract_json(text: str) -> dict:
-        cleaned = text.strip().replace("```json", "").replace("```", "").strip()
-        start, end = cleaned.find("{"), cleaned.rfind("}")
-        if start == -1 or end == -1 or end < start:
-            raise GeminiClient.GeminiError("Respuesta de IA sin JSON válido.")
-        return json.loads(cleaned[start:end + 1])
-
-    @classmethod
-    def analyze_image(cls, image_path: str, api_key: str) -> dict:
-        import requests
-
-        with open(image_path, "rb") as f:
-            image_bytes = f.read()
-        image_b64 = base64.b64encode(image_bytes).decode("ascii")
-
-        mime = "image/jpeg"
-        if image_path.lower().endswith(".png"):
-            mime = "image/png"
-        elif image_path.lower().endswith(".webp"):
-            mime = "image/webp"
-
-        payload = {
-            "contents": [
-                {
-                    "parts": [
-                        {"text": DIAGNOSIS_PROMPT},
-                        {"inline_data": {"mime_type": mime, "data": image_b64}},
-                    ]
-                }
-            ],
-            "generationConfig": {
-                "response_mime_type": "application/json",
-                "max_output_tokens": 2048,
-                "temperature": 0.3,
-            },
-        }
-
-        last_error = ""
-        for model in GEMINI_MODELS:
-            url = GEMINI_ENDPOINT.format(model=model, key=api_key)
-            try:
-                resp = requests.post(url, json=payload, timeout=60)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    txt = data["candidates"][0]["content"]["parts"][0]["text"]
-                    return cls._extract_json(txt)
-                else:
-                    last_error = f"HTTP {resp.status_code}: {resp.text[:120]}"
-            except Exception as e:
-                last_error = str(e)
-
-        raise cls.GeminiError(f"Error al conectar con Gemini: {last_error}")
-
-# ---------------------------------------------------------------------------
 # Clases de Pantallas Requeridas por agrowillay_ui.kv
 # ---------------------------------------------------------------------------
 
@@ -416,7 +490,7 @@ class AgrowillayApp(MDApp):
         Clock.schedule_once(lambda dt: self.check_weather_alerts(), 1.0)
 
     # ------------------------------------------------------------------
-    # Navegación entre Pantallas
+    # Navegación
     # ------------------------------------------------------------------
 
     def _go(self, screen_name, tab_name):
@@ -476,6 +550,11 @@ class AgrowillayApp(MDApp):
                 toast("Acceso ADMIN concedido")
                 self._go("admin", "admin")
                 self.refresh_admin_agrovets_ui()
+                try:
+                    admin_scr = self.root.ids.sm.get_screen("admin")
+                    admin_scr.ids.admin_input_api_key.text = ConfigManager.load_api_key()
+                except Exception:
+                    pass
             else:
                 toast("Código incorrecto")
 
@@ -490,6 +569,18 @@ class AgrowillayApp(MDApp):
             ],
         )
         self._admin_dialog.open()
+
+    def admin_save_api_key(self):
+        try:
+            admin_screen = self.root.ids.sm.get_screen("admin")
+            nueva_clave = admin_screen.ids.admin_input_api_key.text.strip()
+            if not nueva_clave:
+                toast("Ingresa una clave válida")
+                return
+            ConfigManager.save_api_key(nueva_clave)
+            toast("¡Clave de Gemini guardada correctamente!")
+        except Exception:
+            _write_crash_log(traceback.format_exc())
 
     def admin_save_agroveterinaria(self):
         try:
