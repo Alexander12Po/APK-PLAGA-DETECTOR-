@@ -16,6 +16,11 @@ jobs:
       - name: Descargar el código del repositorio
         uses: actions/checkout@v4
 
+      - name: Usar el keystore de firma fijo del repositorio (para que las actualizaciones se instalen encima de la version anterior, sin pedir desinstalar)
+        run: |
+          mkdir -p ~/.android
+          cp debug.keystore ~/.android/debug.keystore
+
       - name: Instalar Python
         uses: actions/setup-python@v5
         with:
@@ -26,12 +31,6 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
-
-      - name: Cachear el keystore de firma (para que las actualizaciones se instalen encima de la version anterior, sin pedir desinstalar)
-        uses: actions/cache@v4
-        with:
-          path: ~/.android/debug.keystore
-          key: agrowillay-debug-keystore-v1
 
       - name: Instalar dependencias del sistema
         run: |
@@ -72,16 +71,33 @@ jobs:
       - name: Leer la version desde main.py
         id: version
         run: |
-          VERSION=$(grep -oP '(?<=APP_VERSION = ")[^"]+' main.py || echo "1.1.0")
+          VERSION=$(grep -oP '(?<=APP_VERSION = ")[^"]+' main.py)
           echo "Version detectada: $VERSION"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Publicar el release en GitHub con el APK adjunto
-        uses: softprops/action-gh-release@v2
-        if: success()
-        with:
-          tag_name: v${{ steps.version.outputs.version }}
-          name: Agrowillay v${{ steps.version.outputs.version }}
-          files: bin/*.apk
-          token: ${{ secrets.GITHUB_TOKEN }}
-          overwrite: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set +e
+          TAG="v${{ steps.version.outputs.version }}"
+          intento=1
+          max_intentos=5
+          exito=1
+          while [ $intento -le $max_intentos ]; do
+            echo "=== Intento $intento de $max_intentos ==="
+            # Por si quedo un release a medias de un intento anterior
+            gh release delete "$TAG" --yes >/dev/null 2>&1
+            gh release create "$TAG" bin/*.apk \
+              --title "Agrowillay $TAG" \
+              --notes "Actualizacion automatica de Agrowillay."
+            resultado=$?
+            if [ $resultado -eq 0 ]; then
+              exito=0
+              break
+            fi
+            echo "Fallo publicando el release (probable problema pasajero de GitHub). Esperando 20 segundos antes de reintentar..."
+            sleep 20
+            intento=$((intento + 1))
+          done
+          exit $exito
