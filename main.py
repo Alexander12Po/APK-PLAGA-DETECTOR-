@@ -78,12 +78,12 @@ CAMERA_REQUEST_CODE = 1888
 ADMIN_PIN_CODE = "673847"
 
 # Modelos recomendados vigentes de Google Gemini
-GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.5-pro"]
+GEMINI_MODELS = ["gemini-3.7-flash", "gemini-3.6-flash"]
 GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
 
 # Clave por defecto o variable de entorno
 DEFAULT_GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AQ.Ab8RN6JUSmY_mCwVu6L7n2oa05nwvxsf8NbHKdFWd_Tkbo-n0Q")
-APP_VERSION = "1.1.2"
+APP_VERSION = "1.1.3"
 GITHUB_REPO = "Alexander12Po/APK-PLAGA-DETECTOR-"
 
 DIAGNOSIS_PROMPT = """Eres un ingeniero agrónomo experto en fitosanidad y control de plagas agrícolas en los Andes y valles interandinos.
