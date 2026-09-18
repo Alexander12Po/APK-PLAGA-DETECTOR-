@@ -88,7 +88,7 @@ GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{mode
 
 # Clave por defecto o variable de entorno
 DEFAULT_GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AQ.Ab8RN6KAogAaCdNl0j3XVKyHrb1DvE0XoqaK9-K9gjfI9dInkQ")
-APP_VERSION = "1.1.4"
+APP_VERSION = "1.1.5"
 GITHUB_REPO = "Alexander12Po/APK-PLAGA-DETECTOR-"
 
 DIAGNOSIS_PROMPT = """Eres un ingeniero agrónomo experto en fitosanidad y control de plagas agrícolas en los Andes y valles interandinos.
